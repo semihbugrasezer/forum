@@ -1,0 +1,507 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useEffect, useState } from "react";
+import { User } from "@supabase/supabase-js";
+import { 
+  Home, 
+  PlusCircle, 
+  MessageSquare, 
+  Bell, 
+  Search, 
+  Menu, 
+  X, 
+  LogOut, 
+  LogIn, 
+  UserCircle, 
+  Sun,
+  Moon,
+  Star
+} from "lucide-react";
+import { toast } from "sonner";
+import { useTheme } from "next-themes";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  SheetClose,
+} from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+interface NavItem {
+  title: string;
+  href: string;
+  icon: React.ElementType;
+  requireAuth?: boolean;
+  adminOnly?: boolean;
+}
+
+const mainNavItems: NavItem[] = [
+  {
+    title: "Ana Sayfa",
+    href: "/",
+    icon: Home,
+  },
+  {
+    title: "Forum",
+    href: "/forum",
+    icon: MessageSquare,
+  },
+  {
+    title: "Arama",
+    href: "/search",
+    icon: Search,
+  },
+  {
+    title: "Yeni Konu",
+    href: "/new-topic",
+    icon: PlusCircle,
+    requireAuth: true,
+  },
+];
+
+const userNavItems: NavItem[] = [
+  {
+    title: "Profilim",
+    href: "/user-profile",
+    icon: UserCircle,
+    requireAuth: true,
+  },
+  {
+    title: "Bildirimler",
+    href: "/forum/notifications",
+    icon: Bell,
+    requireAuth: true,
+  },
+  {
+    title: "Miles&Smiles",
+    href: "/forum/miles-and-smiles",
+    icon: Star,
+    requireAuth: true,
+  },
+  {
+    title: "Admin Panel",
+    href: "/admin",
+    icon: UserCircle,
+    requireAuth: true,
+    adminOnly: true,
+  },
+];
+
+export function Header() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(3); // Örnek değer
+  const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
+  const supabase = createClientComponentClient();
+  const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+      setLoading(false);
+
+      const { data: authListener } = supabase.auth.onAuthStateChange(
+        (event, session) => {
+          setUser(session?.user || null);
+        }
+      );
+
+      return () => {
+        authListener?.subscription.unsubscribe();
+      };
+    };
+
+    checkUser();
+  }, [supabase]);
+
+  const handleSignOut = async () => {
+    setIsMenuOpen(false);
+    try {
+      await supabase.auth.signOut();
+      toast.success("Başarıyla çıkış yapıldı.");
+    } catch (error) {
+      toast.error("Çıkış yaparken bir hata oluştu.");
+    }
+  };
+
+  const handleSignIn = () => {
+    setIsMenuOpen(false);
+  };
+
+  const isAdmin = user?.email?.endsWith("@thy.com") || false; // Örnek admin kontrolü
+  
+  const filteredUserNavItems = userNavItems.filter(
+    (item) => !item.adminOnly || (item.adminOnly && isAdmin)
+  );
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-sm">
+      <div className="container flex h-16 items-center justify-between px-4">
+        {/* Logo ve Başlık */}
+        <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center space-x-2">
+            {/* Airplane Logo - New transparent version */}
+            <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md text-primary font-bold">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-7 w-7 transition-all"
+              >
+                <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+              </svg>
+            </div>
+            <span className="hidden font-bold text-base sm:inline-block">THY Forum</span>
+          </Link>
+        </div>
+
+        {/* Masaüstü Navigasyon */}
+        <nav className="hidden md:flex items-center gap-5">
+          {mainNavItems.map((item) => {
+            // Özel işlem: arama butonu için
+            if (item.href === "/search") {
+              return (
+                <Link 
+                  key={item.href} 
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary",
+                    pathname === item.href || pathname.startsWith(item.href)
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  )}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const searchTerm = prompt("Aramak istediğiniz kelimeyi girin:");
+                    if (searchTerm && searchTerm.trim() !== "") {
+                      window.location.href = `/search?q=${encodeURIComponent(searchTerm.trim())}`;
+                    }
+                  }}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.title}
+                </Link>
+              );
+            }
+            
+            // Diğer butonlar için normal işlem
+            return (!item.requireAuth || (item.requireAuth && user)) && (
+              <Link 
+                key={item.href} 
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary",
+                  pathname === item.href || pathname.startsWith(item.href)
+                    ? "text-foreground"
+                    : "text-muted-foreground"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.title}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Kullanıcı Menüsü ve Mobil Menü */}
+        <div className="flex items-center gap-2">
+          {/* Tema Değiştirici */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="hidden sm:flex">
+                {mounted ? (
+                  theme === "light" ? (
+                    <Sun className="h-5 w-5" />
+                  ) : theme === "dark" ? (
+                    <Moon className="h-5 w-5" />
+                  ) : (
+                    <Sun className="h-5 w-5" />
+                  )
+                ) : (
+                  <Sun className="h-5 w-5" />
+                )}
+                <span className="sr-only">Tema değiştir</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setTheme("light")}>
+                <Sun className="mr-2 h-4 w-4" />
+                <span>Açık Tema</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("dark")}>
+                <Moon className="mr-2 h-4 w-4" />
+                <span>Koyu Tema</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("system")}>
+                <span>Sistem Teması</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Kullanıcı bilgileri - giriş yapmışsa */}
+          {user ? (
+            <div className="hidden sm:flex sm:items-center sm:gap-2">
+              {/* Bildirim Simgesi */}
+              <Link 
+                href="/forum/notifications"
+                className="relative inline-flex"
+              >
+                <Button variant="ghost" size="icon">
+                  <Bell className="h-5 w-5" />
+                  {notificationCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-600 text-[10px] font-medium text-white flex items-center justify-center">
+                      {notificationCount}
+                    </span>
+                  )}
+                </Button>
+              </Link>
+
+              {/* Yeni Konu Oluştur Butonu - Masaüstü görünümünde belirgin buton olarak eklendi */}
+              <Button asChild variant="default" className="hidden md:flex">
+                <Link href="/new-topic">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Yeni Konu
+                </Link>
+              </Button>
+
+              {/* Kullanıcı Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={user.user_metadata?.avatar_url || ""} alt="Profil" />
+                      <AvatarFallback>{user.email?.[0].toUpperCase() || "U"}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{user.user_metadata?.full_name || user.email?.split("@")[0]}</p>
+                      <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {filteredUserNavItems.map((item) => (
+                    <DropdownMenuItem key={item.href} asChild>
+                      <Link href={item.href} className="cursor-pointer">
+                        <item.icon className="mr-2 h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    className="cursor-pointer text-red-600 focus:text-red-600"
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Çıkış Yap</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <div className="hidden sm:flex sm:items-center sm:gap-2">
+              <Button variant="ghost" asChild>
+                <Link href="/auth/login">
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Giriş Yap
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link href="/auth/register">
+                  Kayıt Ol
+                </Link>
+              </Button>
+            </div>
+          )}
+
+          {/* Mobil Menü */}
+          <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="md:hidden">
+                <Menu className="h-6 w-6" />
+                <span className="sr-only">Menü</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72 sm:w-80">
+              <SheetHeader className="mb-4">
+                <SheetTitle>THY Forum</SheetTitle>
+              </SheetHeader>
+              
+              {/* Mobil Kullanıcı Alanı */}
+              {user ? (
+                <div className="mb-6 flex items-center space-x-4">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={user.user_metadata?.avatar_url || ""} alt="Profil" />
+                    <AvatarFallback>{user.email?.[0].toUpperCase() || "U"}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-sm font-medium leading-none">{user.user_metadata?.full_name || user.email?.split("@")[0]}</p>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-6 flex flex-col gap-2">
+                  <SheetClose asChild>
+                    <Button asChild>
+                      <Link href="/auth/login" onClick={handleSignIn}>
+                        <LogIn className="mr-2 h-4 w-4" />
+                        Giriş Yap
+                      </Link>
+                    </Button>
+                  </SheetClose>
+                  <SheetClose asChild>
+                    <Button variant="outline" asChild>
+                      <Link href="/auth/register" onClick={handleSignIn}>
+                        Kayıt Ol
+                      </Link>
+                    </Button>
+                  </SheetClose>
+                </div>
+              )}
+
+              {/* Mobil Ana Menü */}
+              <div className="space-y-1 py-2">
+                <h2 className="px-2 text-lg font-semibold tracking-tight">Ana Menü</h2>
+                {mainNavItems.map((item) => 
+                  (!item.requireAuth || (item.requireAuth && user)) && (
+                    <SheetClose key={item.href} asChild>
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          "group flex items-center rounded-md px-2 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                          pathname === item.href
+                            ? "bg-accent"
+                            : "transparent"
+                        )}
+                      >
+                        <item.icon className="mr-2 h-5 w-5" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SheetClose>
+                  )
+                )}
+                
+                {/* Mobil için belirgin Yeni Konu Buton */}
+                {user && (
+                  <SheetClose asChild>
+                    <Button asChild className="w-full mt-2 justify-start">
+                      <Link href="/new-topic">
+                        <PlusCircle className="mr-2 h-5 w-5" />
+                        Yeni Konu Oluştur
+                      </Link>
+                    </Button>
+                  </SheetClose>
+                )}
+              </div>
+
+              {/* Mobil Kullanıcı Menüsü */}
+              {user && (
+                <div className="space-y-1 py-2">
+                  <h2 className="px-2 text-lg font-semibold tracking-tight">Kullanıcı Menüsü</h2>
+                  {filteredUserNavItems.map((item) => (
+                    <SheetClose key={item.href} asChild>
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          "group flex items-center rounded-md px-2 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                          pathname === item.href
+                            ? "bg-accent"
+                            : "transparent"
+                        )}
+                      >
+                        <item.icon className="mr-2 h-5 w-5" />
+                        <span>{item.title}</span>
+                        {item.title === "Bildirimler" && notificationCount > 0 && (
+                          <Badge variant="destructive" className="ml-auto">
+                            {notificationCount}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SheetClose>
+                  ))}
+                </div>
+              )}
+
+              {/* Tema Ayarları */}
+              <div className="space-y-1 py-2">
+                <h2 className="px-2 text-lg font-semibold tracking-tight">Ayarlar</h2>
+                <div className="grid grid-cols-3 gap-2 px-2 py-2">
+                  <Button 
+                    variant={mounted && theme === "light" ? "default" : "outline"}
+                    className="w-full flex items-center justify-center" 
+                    onClick={() => setTheme("light")}
+                  >
+                    <Sun className="h-4 w-4 mr-1" />
+                    Açık
+                  </Button>
+                  <Button 
+                    variant={mounted && theme === "dark" ? "default" : "outline"}
+                    className="w-full flex items-center justify-center" 
+                    onClick={() => setTheme("dark")}
+                  >
+                    <Moon className="h-4 w-4 mr-1" />
+                    Koyu
+                  </Button>
+                  <Button 
+                    variant={mounted && theme === "system" ? "default" : "outline"}
+                    className="w-full flex items-center justify-center" 
+                    onClick={() => setTheme("system")}
+                  >
+                    Sistem
+                  </Button>
+                </div>
+              </div>
+
+              {/* Çıkış Yap Butonu */}
+              {user && (
+                <div className="py-4">
+                  <Button 
+                    variant="destructive" 
+                    className="w-full" 
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Çıkış Yap
+                  </Button>
+                </div>
+              )}
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+    </header>
+  );
+}
