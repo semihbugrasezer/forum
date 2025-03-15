@@ -1,3 +1,45 @@
+# Node.js bağımlılıkları
+node_modules/
+npm-debug.log
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+
+# Next.js build dosyaları
+.next/
+out/
+.vercel/
+dist/
+
+# Ortam değişkenleri
 .env
-.env local
-.env development
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+
+# Editor ve IDE dosyaları
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Log ve geçici dosyalar
+logs/
+*.log
+*.cache
+*.tmp
+
+# Türüne göre dışlanan dosyalar
+*.sqlite
+*.bak
+*.pid
+*.seed
+*.lock
+
+# Docker ve ilgili dosyalar
+docker-compose.override.yml
+
+# Git ile ilgili olmayan dosyalar
+.gitignore
