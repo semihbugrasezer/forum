@@ -54,7 +54,7 @@ export async function middleware(req: NextRequest) {
     }
   }
   
-  // Admin sayfası kontrolü
+
   if (adminRoutes.some(route => path.startsWith(route))) {
     if (!user || !isAdmin) {
       // Kullanıcı admin değil veya giriş yapmamış
