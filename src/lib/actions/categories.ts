@@ -62,6 +62,17 @@ export async function getCategoryBySlug(slug: string) {
   return data;
 }
 
+// Admin kontrolü yapan yardımcı fonksiyon
+async function isAdmin(user: any) {
+  if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true') {
+    return true;
+  }
+  
+  return user.email?.endsWith("@thy.com") || 
+         user.app_metadata?.roles?.includes("admin") || 
+         false;
+}
+
 // Kategori oluşturma (admin için)
 export async function createCategory(categoryData: {
   name: string;
@@ -76,7 +87,12 @@ export async function createCategory(categoryData: {
     };
   }
   
-  // Admin kontrolü yapılabilir
+  // Admin kontrolü
+  if (!(await isAdmin(user))) {
+    return {
+      error: 'Bu işlem için admin yetkiniz yok'
+    };
+  }
   
   const supabase = await createServerSupabaseClient();
   
@@ -114,7 +130,12 @@ export async function updateCategory(categoryId: string, categoryData: {
     };
   }
   
-  // Admin kontrolü yapılabilir
+  // Admin kontrolü
+  if (!(await isAdmin(user))) {
+    return {
+      error: 'Bu işlem için admin yetkiniz yok'
+    };
+  }
   
   const supabase = await createServerSupabaseClient();
   
@@ -150,7 +171,12 @@ export async function deleteCategory(categoryId: string) {
     };
   }
   
-  // Admin kontrolü yapılabilir
+  // Admin kontrolü
+  if (!(await isAdmin(user))) {
+    return {
+      error: 'Bu işlem için admin yetkiniz yok'
+    };
+  }
   
   const supabase = await createServerSupabaseClient();
   

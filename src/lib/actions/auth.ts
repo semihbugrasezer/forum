@@ -8,7 +8,7 @@ import { createServerActionClient } from "@supabase/auth-helpers-nextjs";
 import { type Provider } from "@supabase/supabase-js";
 
 export async function signUp(email: string, password: string, name: string) {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(cookieStore);
 
   const { data, error } = await supabase.auth.signUp({
@@ -41,7 +41,7 @@ export async function signUp(email: string, password: string, name: string) {
 }
 
 export async function signIn(email: string, password: string) {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(cookieStore);
 
   const { error } = await supabase.auth.signInWithPassword({
@@ -66,7 +66,7 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signOut() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(cookieStore);
 
   await supabase.auth.signOut();
@@ -75,7 +75,7 @@ export async function signOut() {
 }
 
 export async function requireAuth() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(cookieStore);
   
   const { data: { session } } = await supabase.auth.getSession();
@@ -90,7 +90,7 @@ export async function requireAuth() {
 export async function signIn(formData: FormData) {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerActionClient({ cookies: () => cookieStore });
 
   const { error } = await supabase.auth.signInWithPassword({
@@ -109,7 +109,7 @@ export async function signUp(formData: FormData) {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const name = formData.get("name") as string;
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerActionClient({ cookies: () => cookieStore });
 
   const { error } = await supabase.auth.signUp({
@@ -131,7 +131,7 @@ export async function signUp(formData: FormData) {
 }
 
 export async function signInWithProvider(provider: Provider) {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerActionClient({ cookies: () => cookieStore });
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
@@ -148,7 +148,7 @@ export async function signInWithProvider(provider: Provider) {
 }
 
 export async function getUser() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerActionClient({ cookies: () => cookieStore });
   const { data: { session } } = await supabase.auth.getSession();
   

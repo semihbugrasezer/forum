@@ -6,7 +6,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type Database = {
+export interface Database {
   public: {
     Tables: {
       posts: {
@@ -15,39 +15,24 @@ export type Database = {
           created_at: string
           title: string
           content: string
-          author_id: string
-          category_id: string
+          user_id: string
           updated_at: string | null
-          views: number
-          likes: number
-          is_pinned: boolean
-          is_locked: boolean
         }
         Insert: {
           id?: string
           created_at?: string
           title: string
           content: string
-          author_id: string
-          category_id: string
+          user_id: string
           updated_at?: string | null
-          views?: number
-          likes?: number
-          is_pinned?: boolean
-          is_locked?: boolean
         }
         Update: {
           id?: string
           created_at?: string
           title?: string
           content?: string
-          author_id?: string
-          category_id?: string
+          user_id?: string
           updated_at?: string | null
-          views?: number
-          likes?: number
-          is_pinned?: boolean
-          is_locked?: boolean
         }
       }
       comments: {
@@ -55,92 +40,51 @@ export type Database = {
           id: string
           created_at: string
           content: string
-          author_id: string
+          user_id: string
           post_id: string
-          parent_id: string | null
           updated_at: string | null
-          likes: number
         }
         Insert: {
           id?: string
           created_at?: string
           content: string
-          author_id: string
+          user_id: string
           post_id: string
-          parent_id?: string | null
           updated_at?: string | null
-          likes?: number
         }
         Update: {
           id?: string
           created_at?: string
           content?: string
-          author_id?: string
+          user_id?: string
           post_id?: string
-          parent_id?: string | null
           updated_at?: string | null
-          likes?: number
-        }
-      }
-      categories: {
-        Row: {
-          id: string
-          created_at: string
-          name: string
-          description: string | null
-          parent_id: string | null
-          order: number
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          name: string
-          description?: string | null
-          parent_id?: string | null
-          order?: number
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          name?: string
-          description?: string | null
-          parent_id?: string | null
-          order?: number
         }
       }
       profiles: {
         Row: {
           id: string
           created_at: string
-          email: string
-          display_name: string | null
+          username: string
+          full_name: string | null
           avatar_url: string | null
-          role: string
-          last_login: string | null
-          is_premium: boolean
-          premium_until: string | null
+          updated_at: string | null
         }
         Insert: {
           id: string
           created_at?: string
-          email: string
-          display_name?: string | null
+          username: string
+          full_name?: string | null
           avatar_url?: string | null
-          role?: string
-          last_login?: string | null
-          is_premium?: boolean
-          premium_until?: string | null
+          updated_at?: string | null
         }
         Update: {
           id?: string
           created_at?: string
-          email?: string
-          display_name?: string | null
+          username?: string
+          full_name?: string | null
           avatar_url?: string | null
-          role?: string
-          last_login?: string | null
-          is_premium?: boolean
-          premium_until?: string | null
+          updated_at?: string | null
         }
       }
     }
@@ -154,58 +98,101 @@ export type Database = {
       [_ in never]: never
     }
   }
-};
-
-// Define the types that are imported in various files
-
-export interface Post {
-  id: string;
-  title: string;
-  content: string;
-  category: string;
-  subcategory?: string;
-  authorId: string;
-  authorName: string;
-  authorPhotoURL?: string;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-  views: number;
-  likes: number;
-  comments: number;
-  tags?: string[];
 }
 
-export interface Comment {
-  id: string;
-  postId: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorPhotoURL?: string;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-  likes: number;
-}
+type PublicSchema = Database[Extract<keyof Database, "public">]
 
-export interface Category {
-  id: string;
-  name: string;
-  description: string;
-  slug: string;
-  parentId?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  topicCount?: number;
-  icon?: string;
-}
+export type Tables<
+  PublicTableNameOrOptions extends
+    | keyof (PublicSchema["Tables"] & PublicSchema["Views"])
+    | { schema: keyof Database },
+  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+    ? keyof (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
+        Database[PublicTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+  ? (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
+      Database[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : PublicTableNameOrOptions extends keyof (PublicSchema["Tables"] &
+        PublicSchema["Views"])
+    ? (PublicSchema["Tables"] &
+        PublicSchema["Views"])[PublicTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
 
-export interface User {
-  id: string;
-  email: string;
-  username?: string;
-  displayName?: string;
-  photoURL?: string;
-  role: "user" | "admin" | "moderator";
-  isActive: boolean;
-  createdAt: string | Date;
-}
+export type TablesInsert<
+  PublicTableNameOrOptions extends
+    | keyof PublicSchema["Tables"]
+    | { schema: keyof Database },
+  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
+    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  PublicTableNameOrOptions extends
+    | keyof PublicSchema["Tables"]
+    | { schema: keyof Database },
+  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
+    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  PublicEnumNameOrOptions extends
+    | keyof PublicSchema["Enums"]
+    | { schema: keyof Database },
+  EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
+    ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = PublicEnumNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
+    ? PublicSchema["Enums"][PublicEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof PublicSchema["CompositeTypes"]
+    | { schema: keyof Database },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
+    ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never

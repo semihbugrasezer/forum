@@ -2,30 +2,39 @@
 
 import { cookies } from 'next/headers';
 import { CookieOptions, createServerClient } from '@supabase/ssr';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
+import { createClient } from '@/lib/supabase/server';
 
 type LikeResponse = {
   success?: boolean;
-  action?: 'liked' | 'unliked';
-  error?: string;
+  liked?: boolean;
+  message?: string;
 };
 
-function createServerSupabaseClient() {
-  const cookieStore = cookies();
-  
+export async function createServerSupabaseClient() {
+  const cookieStore = await cookies();
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         async get(name: string) {
-          return (await cookieStore).get(name)?.value;
+          return cookieStore.get(name)?.value;
         },
         async set(name: string, value: string, options: CookieOptions) {
-          (await cookieStore).set(name, value, options);
+          try {
+            cookieStore.set(name, value, options);
+          } catch (error) {
+            console.error('Error setting cookie:', error);
+          }
         },
         async remove(name: string, options: CookieOptions) {
-          (await cookieStore).set(name, '', options);
+          try {
+            cookieStore.set(name, '', { ...options, maxAge: 0 });
+          } catch (error) {
+            console.error('Error removing cookie:', error);
+          }
         },
       },
     }
@@ -40,34 +49,40 @@ async function handleLikeOperation(
   incrementRpc: string,
   decrementRpc: string
 ): Promise<LikeResponse> {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   
-  // Check for existing like
-  const { data: existingLike, error: fetchError } = await supabase
+  // Check if user already liked this item
+  const { data: existingLike, error: checkError } = await supabase
     .from(table)
     .select('id')
     .eq(idField, itemId)
     .eq('user_id', userId)
-    .single();
-    
-  if (fetchError && fetchError.code !== 'PGRST116') {
-    console.error(`Like check error:`, fetchError);
+    .maybeSingle();
+  
+  if (checkError) {
+    console.error('Check error:', checkError);
     return { error: 'Beğeni durumu kontrol edilirken bir hata oluştu.' };
   }
-
+  
+  // If already liked, remove the like
   if (existingLike) {
-    // Remove like
     const { error: deleteError } = await supabase
       .from(table)
       .delete()
       .eq('id', existingLike.id);
-      
+    
     if (deleteError) {
       console.error('Delete error:', deleteError);
       return { error: 'Beğeni kaldırılırken bir hata oluştu.' };
     }
     
-    await supabase.rpc(decrementRpc, { [idField]: itemId });
+    // Decrement like count
+    try {
+      await supabase.rpc(decrementRpc, { [idField]: itemId });
+    } catch (rpcError) {
+      console.error('RPC error:', rpcError);
+    }
+    
     return { success: true, action: 'unliked' };
   }
 
@@ -85,58 +100,172 @@ async function handleLikeOperation(
     return { error: 'Beğeni eklenirken bir hata oluştu.' };
   }
   
-  await supabase.rpc(incrementRpc, { [idField]: itemId });
+  // Increment like count
+  try {
+    await supabase.rpc(incrementRpc, { [idField]: itemId });
+  } catch (rpcError) {
+    console.error('RPC error:', rpcError);
+  }
+  
   return { success: true, action: 'liked' };
 }
 
 export async function toggleTopicLike(topicId: string): Promise<LikeResponse> {
   try {
-    const supabase = createServerSupabaseClient();
+    const supabase = await createClient();
+    
+    // First check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!session) {
-      return { error: 'Bu işlem için giriş yapmalısınız.' };
+      return { success: false, message: 'Authentication required' };
     }
-
-    const result = await handleLikeOperation(
-      'topic_likes',
-      topicId,
-      session.user.id,
-      'topic_id',
-      'increment_topic_like_count',
-      'decrement_topic_like_count'
-    );
     
-    revalidatePath(`/topics/${topicId}`);
-    return result;
+    // Check if topic is already liked
+    const { data: existingLike } = await supabase
+      .from('topic_likes')
+      .select('id')
+      .eq('topic_id', topicId)
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    
+    if (existingLike) {
+      // Unlike the topic
+      const { error } = await supabase
+        .from('topic_likes')
+        .delete()
+        .eq('id', existingLike.id);
+      
+      if (error) {
+        console.error('Error unliking topic:', error);
+        return { success: false, message: 'Failed to unlike topic' };
+      }
+      
+      revalidatePath(`/topics/${topicId}`);
+      return { success: true, liked: false };
+    } else {
+      // Like the topic
+      const { error } = await supabase
+        .from('topic_likes')
+        .insert({ 
+          topic_id: topicId, 
+          user_id: session.user.id,
+          created_at: new Date().toISOString()
+        });
+      
+      if (error) {
+        console.error('Error liking topic:', error);
+        return { success: false, message: 'Failed to like topic' };
+      }
+      
+      revalidatePath(`/topics/${topicId}`);
+      return { success: true, liked: true };
+    }
   } catch (error) {
-    console.error('Topic like error:', error);
-    return { error: 'Beğeni işlemi sırasında beklenmeyen bir hata oluştu.' };
+    console.error('Topic like operation error:', error);
+    return { success: false, message: 'An unexpected error occurred' };
   }
 }
 
 export async function toggleCommentLike(commentId: string, topicId: string): Promise<LikeResponse> {
   try {
-    const supabase = createServerSupabaseClient();
+    const supabase = await createClient();
+    
+    // First check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!session) {
-      return { error: 'Bu işlem için giriş yapmalısınız.' };
+      return { success: false, message: 'Authentication required' };
     }
-
-    const result = await handleLikeOperation(
-      'comment_likes',
-      commentId,
-      session.user.id,
-      'comment_id',
-      'increment_comment_like_count',
-      'decrement_comment_like_count'
-    );
     
-    revalidatePath(`/topics/${topicId}`);
-    return result;
+    // Check if comment is already liked
+    const { data: existingLike } = await supabase
+      .from('comment_likes')
+      .select('id')
+      .eq('comment_id', commentId)
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    
+    if (existingLike) {
+      // Unlike the comment
+      const { error } = await supabase
+        .from('comment_likes')
+        .delete()
+        .eq('id', existingLike.id);
+      
+      if (error) {
+        console.error('Error unliking comment:', error);
+        return { success: false, message: 'Failed to unlike comment' };
+      }
+      
+      revalidatePath(`/topics/${topicId}`);
+      return { success: true, liked: false };
+    } else {
+      // Like the comment
+      const { error } = await supabase
+        .from('comment_likes')
+        .insert({ 
+          comment_id: commentId, 
+          user_id: session.user.id,
+          created_at: new Date().toISOString()
+        });
+      
+      if (error) {
+        console.error('Error liking comment:', error);
+        return { success: false, message: 'Failed to like comment' };
+      }
+      
+      revalidatePath(`/topics/${topicId}`);
+      return { success: true, liked: true };
+    }
   } catch (error) {
-    console.error('Comment like error:', error);
-    return { error: 'Beğeni işlemi sırasında beklenmeyen bir hata oluştu.' };
+    console.error('Comment like operation error:', error);
+    return { success: false, message: 'An unexpected error occurred' };
+  }
+}
+
+// Check if user has liked a topic
+export async function checkTopicLike(topicId: string) {
+  try {
+    // Safely create Supabase client
+    const supabase = await createClient();
+    
+    // First check if user is authenticated
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('Session error in checkTopicLike:', sessionError);
+      return { liked: false };
+    }
+    
+    const session = sessionData?.session;
+    
+    if (!session) {
+      return { liked: false };
+    }
+    
+    // Ensure user ID exists
+    if (!session.user?.id) {
+      console.error('User ID missing in session');
+      return { liked: false };
+    }
+    
+    // Check if topic is liked by the user
+    const { data, error } = await supabase
+      .from('topic_likes')
+      .select('id')
+      .eq('topic_id', topicId)
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    
+    if (error) {
+      console.error('Error checking topic like:', error);
+      return { liked: false };
+    }
+    
+    return { liked: !!data };
+  } catch (error) {
+    console.error('Check topic like error:', error);
+    return { liked: false };
   }
 }

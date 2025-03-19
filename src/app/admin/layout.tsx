@@ -117,14 +117,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         
         const user = session.user;
         
-        // Admin kontrolü - gerçek projede daha sağlam bir kontrol olmalı
-        // THY e-posta kontrol veya admin rolü kontrol gibi
-        const isAdmin = 
-          user.email?.endsWith("@thy.com") || 
-          user.app_metadata?.roles?.includes("admin") ||
-          true; // Geliştirme amaçlı tüm kullanıcılara açık
+        // Admin kontrolü - Geliştirme ve prodüksiyon için güvenli
+        const isAdmin = () => {
+          if (process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true' && process.env.NODE_ENV === 'development') {
+            return true;
+          }
+          
+          return user.email?.endsWith("@thy.com") || 
+                 user.app_metadata?.roles?.includes("admin") || 
+                 false;
+        };
         
-        if (!isAdmin) {
+        if (!isAdmin()) {
           toast.error("Bu sayfaya erişim izniniz yok.");
           router.push('/');
           return;
@@ -334,4 +338,4 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
     </div>
   );
-} 
+}

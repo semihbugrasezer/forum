@@ -33,7 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { categoryAPI } from "@/services/api/categories";
+import { CategoryAPI } from "@/services/api/categories";
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -68,7 +68,7 @@ export default function NewCategoryPage() {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
-      await categoryAPI.createCategory(values);
+      await CategoryAPI.createCategory(values);
       toast.success("Kategori başarıyla oluşturuldu");
       router.push("/admin/categories");
       router.refresh();

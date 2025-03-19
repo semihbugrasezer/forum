@@ -1,34 +1,68 @@
 'use server';
 
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { Database } from '@/lib/supabase/database.types';
+import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { User } from '@supabase/supabase-js';
 
 // Helper function to get current logged in user
 async function getUser(): Promise<User | null> {
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
   return session?.user || null;
 }
 
 export async function createServerSupabaseClient() {
-  const cookieStore = await cookies();
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name: string) => cookieStore.get(name)?.value,
-        set: (name: string, value: string, options: any) => {
-          cookieStore.set(name, value, options);
-        },
-        remove: (name: string, options: any) => {
-          cookieStore.set(name, '', options);
-        },
-      },
-    }
-  );
+  const cookieStore = cookies();
+
+  return createClient();
+}
+
+interface Comment {
+  id: string;
+  content: string;
+  user_id: string;
+  topic_id: string;
+  parent_id?: string;
+  created_at: string;
+  updated_at: string;
+  user?: {
+    id: string;
+    email: string;
+    profiles?: {
+      name: string;
+      avatar_url?: string;
+    };
+  };
+  like_count?: number;
+}
+
+interface FormattedComment extends Omit<Comment, 'user'> {
+  user_name: string;
+  user_avatar?: string;
+  like_count: number;
+  user_has_liked: boolean;
+  replies: FormattedComment[];
+}
+
+interface CommentQueryResponse {
+  id: string;
+  content: string;
+  user_id: string;
+  topic_id: string;
+  parent_id?: string;
+  created_at: string;
+  updated_at: string;
+  user: {
+    id: string;
+    email: string;
+    profiles: {
+      name: string;
+      avatar_url?: string;
+    } | null;
+  };
+  like_count: number;
 }
 
 /**
@@ -37,20 +71,74 @@ export async function createServerSupabaseClient() {
  * @returns Yorumların listesi veya hata
  */
 export async function getCommentsByTopicId(topicId: string) {
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
   
-  const { data, error } = await supabase
-    .from('comment_details')
-    .select('*')
-    .eq('topic_id', topicId)
-    .order('created_at', { ascending: true });
-  
-  if (error) {
-    console.error('Yorumlar alınırken hata oluştu:', error.message);
-    return [];
+  try {
+    const { data, error } = await supabase
+      .from('comments')
+      .select(`
+        id,
+        content,
+        created_at,
+        user_id
+      `)
+      .eq('topic_id', topicId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    // Get user profiles separately
+    const userIds = data?.map(comment => comment.user_id) || [];
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, name, avatar_url')
+      .in('id', userIds);
+
+    // Create a map of user profiles
+    const profileMap = new Map();
+    profiles?.forEach(profile => {
+      profileMap.set(profile.id, profile);
+    });
+
+    // Format the comments to match the expected structure
+    const formattedComments = data?.map(comment => {
+      const profile = profileMap.get(comment.user_id);
+      return {
+        id: comment.id,
+        content: comment.content,
+        created_at: comment.created_at,
+        user_name: profile?.name || 'Anonymous',
+        user_avatar: profile?.avatar_url || null
+      };
+    }) || [];
+
+    return { comments: formattedComments };
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    return { comments: [] };
   }
-  
-  return data || [];
+}
+
+// Yorumları hiyerarşik yapıya çevirme yardımcı fonksiyonu
+function buildCommentTree(comments: FormattedComment[]): FormattedComment[] {
+  const commentMap: Record<string, FormattedComment> = {};
+  const roots: FormattedComment[] = [];
+
+  // Önce tüm yorumları ID'lerine göre map'leyelim
+  comments.forEach(comment => {
+    commentMap[comment.id] = { ...comment, replies: [] };
+  });
+
+  // Sonra parent_id ilişkilerine göre yorumları düzenleyelim
+  comments.forEach(comment => {
+    if (comment.parent_id && commentMap[comment.parent_id]) {
+      commentMap[comment.parent_id].replies.push(commentMap[comment.id]);
+    } else {
+      roots.push(commentMap[comment.id]);
+    }
+  });
+
+  return roots;
 }
 
 /**
@@ -59,38 +147,36 @@ export async function getCommentsByTopicId(topicId: string) {
  * @param content - Yorum içeriği
  * @returns Eklenen yorumun ID'si veya hata
  */
-export async function addComment(topicId: string, content: string) {
-  try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      return { error: 'Yorum yapmak için giriş yapmalısınız.' };
-    }
+export async function addComment(formData: FormData) {
+  const supabase = await createClient();
+  const content = formData.get('content')?.toString();
+  const topicId = formData.get('topicId')?.toString();
 
-    // Yorumu ekle
-    const { data, error } = await supabase
-      .from('comments')
-      .insert({
-        topic_id: topicId,
-        user_id: session.user.id,
-        content,
-        created_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-
-    if (error) throw error;
-
-    // Konu tablosundaki yorum sayısını güncelle ve sayfayı yeniden doğrula
-    await supabase.rpc('increment_comment_count', { topic_id: topicId });
-    revalidatePath(`/topics/${topicId}`);
-
-    return { success: true, commentId: data.id };
-  } catch (error) {
-    console.error('Yorum eklenirken hata:', error);
-    return { error: 'Yorum eklenirken bir hata oluştu.' };
+  if (!content || !topicId) {
+    return { error: 'Missing required fields' };
   }
+
+  // Get the current user
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { error: 'User not authenticated' };
+  }
+
+  const { data, error } = await supabase
+    .from('comments')
+    .insert([{ 
+      content,
+      topic_id: topicId,
+      user_id: session.user.id
+    }])
+    .select();
+
+  if (error) {
+    console.error('Error adding comment:', error);
+    return { error: error.message };
+  }
+
+  return { success: true };
 }
 
 /**
@@ -101,6 +187,7 @@ export async function addComment(topicId: string, content: string) {
  * @returns İşlem sonucu
  */
 export async function updateComment(commentId: string, content: string, topicId?: string) {
+  const supabase = await createClient();
   try {
     const user = await getUser();
     
@@ -108,9 +195,6 @@ export async function updateComment(commentId: string, content: string, topicId?
       return { error: 'Kullanıcı oturumu bulunamadı' };
     }
     
-    const supabase = await createServerSupabaseClient();
-    
-    // Yorumun kullanıcıya ait olup olmadığını kontrol et
     const { data: comment, error: checkError } = await supabase
       .from('comments')
       .select('user_id, topic_id')
@@ -166,6 +250,7 @@ export async function createComment(commentData: {
   topic_id: string;
   parent_id?: string;
 }) {
+  const supabase = await createClient();
   const user = await getUser();
   
   if (!user) {
@@ -175,7 +260,6 @@ export async function createComment(commentData: {
   }
   
   try {
-    const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from('comments')
       .insert({
@@ -184,14 +268,23 @@ export async function createComment(commentData: {
         user_id: user.id,
         parent_id: commentData.parent_id,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .select()
       .single();
 
     if (error) throw error;
 
-    // Update comment count and revalidate page
-    await supabase.rpc('increment_comment_count', { topic_id: commentData.topic_id });
+    // Update comment count in topics table
+    try {
+      // Use type assertion for the RPC call
+      await (supabase.rpc as any)('increment_comment_count', { topic_id: commentData.topic_id });
+    } catch (rpcError) {
+      console.error('Error incrementing comment count:', rpcError);
+      // Continue execution even if this fails
+    }
+    
+    // Revalidate the page to show the new comment
     revalidatePath(`/topics/${commentData.topic_id}`);
 
     return { success: true, data };
@@ -208,6 +301,7 @@ export async function createComment(commentData: {
  * @returns İşlem sonucu
  */
 export async function deleteComment(commentId: string, topicId?: string) {
+  const supabase = await createClient();
   try {
     const user = await getUser();
     
@@ -215,9 +309,6 @@ export async function deleteComment(commentId: string, topicId?: string) {
       return { error: 'Bu işlem için giriş yapmalısınız.' };
     }
     
-    const supabase = await createServerSupabaseClient();
-    
-    // Yorumun kullanıcıya ait olup olmadığını kontrol et
     const { data: comment, error: checkError } = await supabase
       .from('comments')
       .select('user_id, topic_id')
@@ -251,7 +342,13 @@ export async function deleteComment(commentId: string, topicId?: string) {
     // Konu tablosundaki yorum sayısını güncelle
     const actualTopicId = topicId || comment.topic_id;
     if (actualTopicId) {
-      await supabase.rpc('decrement_comment_count', { topic_id: actualTopicId });
+      try {
+        // Use type assertion for the RPC call
+        await (supabase.rpc as any)('decrement_comment_count', { topic_id: actualTopicId });
+      } catch (rpcError) {
+        console.error('Error decrementing comment count:', rpcError);
+        // Continue execution even if this fails
+      }
       
       // Sayfayı yeniden doğrula
       revalidatePath(`/topics/${actualTopicId}`);
@@ -264,8 +361,13 @@ export async function deleteComment(commentId: string, topicId?: string) {
   }
 }
 
-// Yorum beğenme/beğeniyi kaldırma
+/**
+ * Bir yoruma beğeni ekler veya kaldırır
+ * @param commentId - Beğeni eklenecek/kaldırılacak yorumun ID'si
+ * @returns İşlem sonucu
+ */
 export async function toggleCommentLike(commentId: string) {
+  const supabase = await createClient();
   const user = await getUser();
   
   if (!user) {
@@ -274,99 +376,112 @@ export async function toggleCommentLike(commentId: string) {
     };
   }
   
-  const supabase = await createServerSupabaseClient();
-  
-  // Kullanıcının yorumu beğenip beğenmediğini kontrol et
-  const { data: existingLike, error: checkError } = await supabase
-    .from('comment_likes')
-    .select('id')
-    .eq('comment_id', commentId)
-    .eq('user_id', user.id)
-    .maybeSingle();
-  
-  if (checkError) {
-    console.error('Beğeni kontrol edilirken hata oluştu:', checkError.message);
-    return {
-      error: checkError.message
-    };
-  }
-  
-  if (existingLike) {
-    // Beğeniyi kaldır
-    const { error } = await supabase
+  try {
+    // Complete type assertion approach for comment_likes table
+    const { data: existingLike, error: checkError } = await (supabase as any)
       .from('comment_likes')
-      .delete()
-      .eq('id', existingLike.id);
+      .select('id')
+      .eq('comment_id', commentId)
+      .eq('user_id', user.id)
+      .maybeSingle();
     
-    if (error) {
-      console.error('Beğeni kaldırılırken hata oluştu:', error.message);
+    if (checkError) {
+      console.error('Beğeni kontrol edilirken hata oluştu:', checkError.message);
       return {
-        error: error.message
+        error: checkError.message
       };
     }
     
-    return { success: true, liked: false };
-  } else {
-    // Beğeni ekle
-    const { error } = await supabase
-      .from('comment_likes')
-      .insert({
-        comment_id: commentId,
-        user_id: user.id,
-      });
-    
-    if (error) {
-      console.error('Beğeni eklenirken hata oluştu:', error.message);
-      return {
-        error: error.message
-      };
+    if (existingLike) {
+      // Beğeniyi kaldır
+      const { error } = await (supabase as any)
+        .from('comment_likes')
+        .delete()
+        .eq('id', existingLike.id);
+      
+      if (error) {
+        console.error('Beğeni kaldırılırken hata oluştu:', error.message);
+        return {
+          error: error.message
+        };
+      }
+      
+      return { success: true, liked: false };
+    } else {
+      // Beğeni ekle
+      const { error } = await (supabase as any)
+        .from('comment_likes')
+        .insert({
+          comment_id: commentId,
+          user_id: user.id,
+        });
+      
+      if (error) {
+        console.error('Beğeni eklenirken hata oluştu:', error.message);
+        return {
+          error: error.message
+        };
+      }
+      
+      return { success: true, liked: true };
     }
-    
-    return { success: true, liked: true };
+  } catch (error) {
+    console.error('Beğeni işleminde hata:', error);
+    return { error: 'Beğeni işleminde bir hata oluştu.' };
   }
 }
 
 // Kullanıcının yorumlarını alma
 export async function getUserComments(userId: string) {
-  const supabase = await createServerSupabaseClient();
-  
-  const { data, error } = await supabase
-    .from('comment_details')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  
-  if (error) {
-    console.error('Kullanıcı yorumları alınırken hata oluştu:', error.message);
+  const supabase = await createClient();
+  try {
+    // Complete type assertion for comment_details view
+    const { data, error } = await (supabase as any)
+      .from('comment_details')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Kullanıcı yorumları alınırken hata oluştu:', error.message);
+      return [];
+    }
+    
+    return data || [];
+  } catch (error) {
+    console.error('Kullanıcı yorumları alınırken beklenmeyen hata:', error);
     return [];
   }
-  
-  return data || [];
 }
 
 // Kullanıcının yorumu beğenip beğenmediğini kontrol etme
 export async function checkCommentLike(commentId: string) {
+  const supabase = await createClient();
   const user = await getUser();
   
   if (!user) {
     return false;
   }
   
-  const supabase = await createServerSupabaseClient();
-  
-  const { data, error } = await supabase
-    .from('comment_likes')
-    .select('id')
-    .eq('comment_id', commentId)
-    .eq('user_id', user.id)
-    .maybeSingle();
-  
-  if (error) {
-    console.error('Beğeni kontrol edilirken hata oluştu:', error.message);
+  try {
+    // Complete type assertion for comment_likes table
+    const { data, error } = await (supabase as any)
+      .from('comment_likes')
+      .select('id')
+      .eq('comment_id', commentId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    
+    if (error) {
+      console.error('Beğeni kontrol edilirken hata oluştu:', error.message);
+      return false;
+    }
+    
+    return !!data;
+  } catch (error) {
+    console.error('Beğeni kontrol edilirken beklenmeyen hata:', error);
     return false;
   }
-  
-  return !!data;
 }
 
 // Add type definitions for clarity
@@ -383,3 +498,6 @@ export interface CommentResponse {
   commentId?: string;
   liked?: boolean;
 }
+
+// Export getCommentsForTopic as an alias for getCommentsByTopicId
+export const getCommentsForTopic = getCommentsByTopicId;

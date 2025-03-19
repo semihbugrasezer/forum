@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
-  // eslint-disable-next-line no-unused-vars
   ArrowUpIcon,
-  // eslint-disable-next-line no-unused-vars
   ArrowDownIcon,
-  // eslint-disable-next-line no-unused-vars
   ChatBubbleLeftIcon,
   ShareIcon,
   FlagIcon,
-  // eslint-disable-next-line no-unused-vars
   BookmarkIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "../../core/context/AuthContext";
 import { getTopic, addReply } from "../../shared/services/forumService";
 import { createReport } from "../../shared/services/reportService";
+import { toggleTopicLike } from "../../../lib/actions/likes";
+import { createComment } from "../../../lib/actions/comments";
+import Comment from "./Comment";
 
 const ReplyInput = ({ onSubmit }) => {
   const [content, setContent] = useState("");
@@ -37,7 +36,10 @@ const ReplyInput = ({ onSubmit }) => {
   if (!currentUser) {
     return (
       <div className="bg-gray-100 p-4 text-center rounded-lg">
-        Yorum yazmak için <Link to="/login" className="text-blue-600">giriş yapın</Link>
+        Yorum yazmak için{" "}
+        <Link to="/login" className="text-blue-600">
+          giriş yapın
+        </Link>
       </div>
     );
   }
@@ -50,8 +52,8 @@ const ReplyInput = ({ onSubmit }) => {
         placeholder="Yorumunuzu yazın..."
         className="w-full border rounded-lg p-4 min-h-[120px]"
       />
-      <button 
-        type="submit" 
+      <button
+        type="submit"
         className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600"
       >
         Gönder
@@ -70,6 +72,8 @@ const TopicDetail = () => {
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isLiked, setIsLiked] = useState(false);
+  const [comments, setComments] = useState([]);
 
   useEffect(() => {
     const fetchTopic = async () => {
@@ -77,6 +81,13 @@ const TopicDetail = () => {
         const topicData = await getTopic(id);
         setTopic(topicData);
         setLikes(topicData.likes || 0);
+        setComments(topicData.comments || []);
+
+        // Check if user has liked this topic
+        if (topicData.user_has_liked && currentUser) {
+          setIsLiked(true);
+        }
+
         setLoading(false);
       } catch (err) {
         setError(err);
@@ -85,7 +96,7 @@ const TopicDetail = () => {
     };
 
     fetchTopic();
-  }, [id]);
+  }, [id, currentUser]);
 
   const handleUpvote = async () => {
     if (!currentUser) {
@@ -94,52 +105,22 @@ const TopicDetail = () => {
     }
 
     try {
-      // Simulated upvote logic
-      // TODO: Implement actual upvote mechanism in your backend service
-      setLikes(prev => prev + 1);
-    } catch (error) {
-      console.error("Upvote failed:", error);
+      const result = await toggleTopicLike(id);
+      if (result.success) {
+        setIsLiked(!isLiked);
+        setLikes((prevLikes) => (isLiked ? prevLikes - 1 : prevLikes + 1));
+      }
+    } catch (err) {
+      console.error("Beğeni işlemi sırasında hata oluştu:", err);
     }
   };
 
-  const handleDownvote = async () => {
-    if (!currentUser) {
-      navigate("/login");
-      return;
-    }
-
-    try {
-      // Simulated downvote logic
-      // TODO: Implement actual downvote mechanism in your backend service
-      setLikes(prev => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error("Downvote failed:", error);
-    }
-  };
-
-  const handleBookmark = () => {
-    setIsBookmarked(!isBookmarked);
-    // TODO: Implement actual bookmark logic in your service
-  };
-
-  const handleReplySubmit = async (content) => {
-    if (!currentUser) return;
-
-    const reply = {
-      content,
-      author: {
-        id: currentUser.uid,
-        username: currentUser.displayName,
-        avatar: currentUser.photoURL
-      },
-      createdAt: new Date()
-    };
-
+  const handleReply = async (reply) => {
     try {
       await addReply(id, reply);
-      setTopic(prev => ({
+      setTopic((prev) => ({
         ...prev,
-        replies: [...(prev.replies || []), reply]
+        replies: [...(prev.replies || []), reply],
       }));
     } catch (error) {
       console.error("Yanıt eklenemedi:", error);
@@ -153,21 +134,21 @@ const TopicDetail = () => {
       return;
     }
 
-    try {
-      const reply = {
-        content: newComment,
-        author: {
-          id: currentUser.uid,
-          username: currentUser.displayName,
-          avatar: currentUser.photoURL,
-        },
-      };
+    if (!newComment.trim()) return;
 
-      await addReply(id, reply);
-      setNewComment("");
-      // Refresh topic to show new comment
-      const updatedTopic = await getTopic(id);
-      setTopic(updatedTopic);
+    try {
+      const result = await createComment({
+        content: newComment,
+        topic_id: id,
+      });
+
+      if (result.success) {
+        setNewComment("");
+        // Reload topic to get updated comments
+        const updatedTopic = await getTopic(id);
+        setTopic(updatedTopic);
+        setComments(updatedTopic.comments || []);
+      }
     } catch (err) {
       console.error("Comment adding failed:", err);
     }
@@ -182,172 +163,168 @@ const TopicDetail = () => {
     try {
       await createReport({
         topicId: id,
-        reporterId: currentUser.uid,
-        reason: 'inappropriate',
-        description: 'Kullanıcı tarafından uygunsuz içerik olarakişaretlendi'
+        reason: "Uygunsuz içerik",
       });
-      alert("Konu başarıyla raporlandı.");
-    } catch (err) {
-      console.error("Topic reporting failed:", err);
+      alert("Konu başarıyla rapor edildi.");
+    } catch (error) {
+      console.error("Rapor oluşturulamadı:", error);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        Yükleniyor...
+      <div className="container mx-auto p-4">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded mb-5 w-3/4"></div>
+          <div className="h-32 bg-gray-200 rounded mb-5"></div>
+          <div className="h-8 bg-gray-200 rounded mb-3 w-1/2"></div>
+        </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !topic) {
     return (
-      <div className="text-center text-red-500 min-h-screen">
-        Bir hata oluştu: {error.message}
-      </div>
-    );
-  }
-
-  if (!topic) {
-    return (
-      <div className="text-center min-h-screen">
-        Konu bulunamadı.
+      <div className="container mx-auto p-4">
+        <div className="bg-red-50 p-4 rounded-lg text-red-700">
+          Konu yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="bg-white shadow-md rounded-lg p-6">
-        {/* Voting Section */}
-        <div className="flex items-center space-x-4 mb-4">
-          <button 
-            onClick={handleUpvote}
-            className="text-gray-500 hover:text-green-500 transition"
-          >
-            <ArrowUpIcon className="h-6 w-6" />
-          </button>
-          <span className="text-lg font-semibold">{likes}</span>
-          <button 
-            onClick={handleDownvote}
-            className="text-gray-500 hover:text-red-500 transition"
-          >
-            <ArrowDownIcon className="h-6 w-6" />
-          </button>
-          <button 
-            onClick={handleBookmark}
-            className={`text-gray-500 ${isBookmarked ? 'text-blue-500' : ''} hover:text-blue-500 transition`}
-          >
-            <BookmarkIcon className="h-6 w-6" />
-          </button>
-        </div>
-
+    <div className="container mx-auto p-4 max-w-4xl">
+      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
         {/* Topic Header */}
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              {topic.title}
-            </h1>
-            <div className="flex items-center text-gray-600">
-              <img 
-                src={topic.author?.avatar || '/default-avatar.png'} 
-                alt={topic.author?.username} 
-                className="w-8 h-8 rounded-full mr-2"
-              />
-              <span>{topic.author?.username}</span>
-              <span className="mx-2">•</span>
-              <span>{new Date(topic.createdAt).toLocaleDateString()}</span>
+        <div className="p-6">
+          <div className="flex items-start">
+            {/* Voting */}
+            <div className="flex flex-col items-center mr-4">
+              <button
+                onClick={handleUpvote}
+                className={`p-1 rounded hover:bg-gray-100 ${
+                  isLiked ? "text-blue-500" : "text-gray-400"
+                }`}
+              >
+                <ArrowUpIcon className="h-6 w-6" />
+              </button>
+              <span className="font-medium text-sm my-1">{likes}</span>
+            </div>
+
+            {/* Topic Content */}
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-gray-900 mb-3">
+                {topic.title}
+              </h1>
+              <div className="prose max-w-none mb-4">{topic.content}</div>
+
+              {topic.image_url && (
+                <div className="mt-4 mb-4">
+                  <img
+                    src={topic.image_url}
+                    alt={topic.title}
+                    className="rounded-lg max-h-96 mx-auto"
+                  />
+                </div>
+              )}
+
+              {/* Meta information */}
+              <div className="flex items-center text-sm text-gray-500 mt-4">
+                <img
+                  src={topic.user_avatar || "/default-avatar.png"}
+                  alt={topic.user_name}
+                  className="h-6 w-6 rounded-full mr-2"
+                />
+                <span className="mr-3">{topic.user_name}</span>
+                <span>
+                  {new Date(topic.created_at).toLocaleDateString("tr-TR")}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <button 
+        </div>
+
+        {/* Topic Actions */}
+        <div className="bg-gray-50 px-6 py-3 flex justify-between border-t border-gray-100">
+          <div className="flex space-x-4">
+            <button className="flex items-center text-gray-500 hover:text-blue-500">
+              <ChatBubbleLeftIcon className="h-5 w-5 mr-1" />
+              <span>{topic.comment_count || comments.length || 0} Yorum</span>
+            </button>
+          </div>
+          <div className="flex space-x-4">
+            <button
               onClick={handleReportTopic}
-              className="text-gray-500 hover:text-red-500 transition"
-              title="Konuyu Raporla"
+              className="flex items-center text-gray-500 hover:text-red-500"
             >
-              <FlagIcon className="h-6 w-6" />
+              <FlagIcon className="h-5 w-5 mr-1" />
+              <span>Rapor Et</span>
             </button>
-            <button 
-              className="text-gray-500 hover:text-blue-500 transition"
-              title="Paylaş"
+            <button className="flex items-center text-gray-500 hover:text-blue-500">
+              <ShareIcon className="h-5 w-5 mr-1" />
+              <span>Paylaş</span>
+            </button>
+            <button
+              className="flex items-center text-gray-500 hover:text-yellow-500"
+              onClick={() => setIsBookmarked(!isBookmarked)}
             >
-              <ShareIcon className="h-6 w-6" />
+              <BookmarkIcon
+                className={`h-5 w-5 mr-1 ${
+                  isBookmarked ? "fill-yellow-500 text-yellow-500" : ""
+                }`}
+              />
+              <span>Kaydet</span>
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Topic Content */}
-        <div className="prose max-w-none mb-8">
-          <p>{topic.content}</p>
-        </div>
-
-        {/* Tags */}
-        {topic.tags && topic.tags.length > 0 && (
-          <div className="flex space-x-2 mb-6">
-            {topic.tags.map((tag) => (
-              <span 
-                key={tag} 
-                className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-sm"
-              >
-                #{tag}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Comments Section */}
-        <div className="border-t pt-6">
-          <h2 className="text-2xl font-semibold mb-4">
-            Yorumlar ({topic.replies?.length || 0})
-          </h2>
-
-          {/* Comment Input */}
-          <form onSubmit={handleAddComment} className="mb-6">
+      {/* Comment Form */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6 p-6">
+        <h3 className="text-lg font-medium mb-4">Yorum Yap</h3>
+        <form onSubmit={handleAddComment}>
+          <div className="mb-4">
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Yorumunuzu yazın..."
-              className="w-full border rounded-lg p-4 mb-2"
-              rows={4}
+              placeholder="Yorumunuzu buraya yazın..."
+              className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              rows="4"
               required
-            />
-            <button 
-              type="submit" 
-              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
+            ></textarea>
+          </div>
+          <div className="text-right">
+            <button
+              type="submit"
+              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium"
             >
-              Yorumu Gönder
+              Gönder
             </button>
-          </form>
+          </div>
+        </form>
+      </div>
 
-          {/* Comments List */}
-          {topic.replies && topic.replies.length > 0 ? (
-            topic.replies.map((reply) => (
-              <div 
-                key={reply.id} 
-                className="border-b pb-4 mb-4 last:border-b-0"
-              >
-                <div className="flex items-center mb-2">
-                  <img 
-                    src={reply.author?.avatar || '/default-avatar.png'} 
-                    alt={reply.author?.username} 
-                    className="w-8 h-8 rounded-full mr-2"
-                  />
-                  <span className="font-medium">{reply.author?.username}</span>
-                  <span className="text-gray-500 text-sm ml-2">
-                    {new Date(reply.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                <p>{reply.content}</p>
-              </div>
-            ))
+      {/* Comments Section */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+        <div className="p-6">
+          <h3 className="text-lg font-medium mb-6">
+            Yorumlar ({topic.comment_count || comments.length || 0})
+          </h3>
+
+          {comments.length === 0 ? (
+            <div className="text-gray-500 text-center py-8">
+              Bu konuya henüz yorum yapılmamış. İlk yorumu siz yapın!
+            </div>
           ) : (
-            <p className="text-gray-500 text-center">
-              Henüz yorum yapılmamış.
-            </p>
+            <div className="space-y-6">
+              {comments.map((comment) => (
+                <Comment key={comment.id} comment={comment} topicId={id} />
+              ))}
+            </div>
           )}
         </div>
       </div>
-      <ReplyInput onSubmit={handleReplySubmit} />
     </div>
   );
 };

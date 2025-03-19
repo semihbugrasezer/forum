@@ -29,23 +29,30 @@ import {
 import { Input } from "@/components/ui/input";
 import { FolderPlus, Search, MoreHorizontal, Pencil, Trash } from "lucide-react";
 import { toast } from "sonner";
-import { categoryAPI } from "@/services/api/categories";
+import { CategoryAPI } from "@/services/api/categories";
 import { Category } from "@/types/supabase";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     const fetchCategories = async () => {
+      setIsLoading(true);
       try {
-        const data = await categoryAPI.getCategories();
-        setCategories(data);
-      } catch (error) {
-        toast.error("Kategoriler yüklenirken bir hata oluştu");
-        console.error(error);
+        const result = await CategoryAPI.getCategories();
+        if (!result.data) {
+          setError('Kategoriler yüklenemedi');
+          return;
+        }
+        setCategories(result.data);
+        setError(null);
+      } catch (err) {
+        setError('Kategoriler yüklenirken beklenmeyen bir hata oluştu');
+        console.error(err);
       } finally {
         setIsLoading(false);
       }
@@ -57,8 +64,8 @@ export default function CategoriesPage() {
   const handleDeleteCategory = async (id: string) => {
     if (window.confirm("Bu kategoriyi silmek istediğinizden emin misiniz?")) {
       try {
-        await categoryAPI.deleteCategory(id);
-        setCategories(categories.filter(category => category.id !== id));
+        await CategoryAPI.deleteCategory(id);
+        setCategories(prev => prev.filter(category => category.id !== id));
         toast.success("Kategori başarıyla silindi");
       } catch (error) {
         toast.error("Kategori silinirken bir hata oluştu");

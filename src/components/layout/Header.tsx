@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { 
@@ -43,6 +42,7 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { supabase } from "@/lib/supabase/client";
 
 interface NavItem {
   title: string;
@@ -111,7 +111,6 @@ export function Header() {
   const [notificationCount, setNotificationCount] = useState(3); // Örnek değer
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
-  const supabase = createClientComponentClient();
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
@@ -136,7 +135,7 @@ export function Header() {
     };
 
     checkUser();
-  }, [supabase]);
+  }, []);
 
   const handleSignOut = async () => {
     setIsMenuOpen(false);

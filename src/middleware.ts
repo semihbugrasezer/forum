@@ -2,29 +2,46 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
-  const response = NextResponse.next()
-  
-  // Properly configure Supabase client with URL and key
-  const supabase = createMiddlewareClient(
-    { req: request, res: response },
-    { 
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! 
-    }
-  )
+// Protected routes configuration
+const protectedRoutes = [
+  '/new-topic',
+  '/user-profile',
+  '/forum/notifications',
+  '/forum/messages',
+  '/forum/profile',
+  '/forum/new-topic',
+  '/forum/edit',
+  '/forum/delete',
+];
 
-  await supabase.auth.getSession()
+export async function middleware(request: NextRequest) {
+  const response = NextResponse.next();
+  const supabase = createMiddlewareClient({ req: request, res: response });
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const path = request.nextUrl.pathname;
   
-  // Handle root route and make sure it's working
-  if (request.nextUrl.pathname === '/') {
-    return response;
+  // Check if the route requires authentication
+  if (protectedRoutes.some(route => path.startsWith(route))) {
+    // If user is not authenticated, redirect to login with return URL
+    if (!session) {
+      const redirectUrl = new URL('/auth/login', request.url);
+      redirectUrl.searchParams.set('redirectTo', path);
+      return NextResponse.redirect(redirectUrl);
+    }
   }
   
-  return response
+  // Handle basic forum access - ensure it's not blocking after authentication
+  if (path.startsWith('/forum') && session) {
+    // Add user context to headers for logging if needed
+    response.headers.set('X-User-Id', session.user?.id || '');
+  }
+
+  return response;
 }
 
-// Only run middleware on auth-related paths and the homepage
 export const config = {
-  matcher: ['/', '/auth/:path*', '/profile/:path*', '/admin/:path*'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 };
