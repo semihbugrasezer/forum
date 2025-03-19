@@ -42,15 +42,21 @@ async function withErrorHandling<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
-// Singleton client instance with proper async handling
-let supabaseClient: ReturnType<typeof createServerClient<Database>> | null = null;
-let clientPromise: Promise<ReturnType<typeof createServerClient<Database>>> | null = null;
+// Connection pool settings
+const DB_POOL_SIZE = parseInt(process.env.DB_POOL_SIZE || '10', 10);
+const DB_CONNECTION_TIMEOUT = parseInt(process.env.DB_CONNECTION_TIMEOUT || '30', 10);
 
-// Create a Supabase client for server components
+// Simple in-memory cache for query results
+const queryCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = parseInt(process.env.CACHE_DURATION || '3600', 10) * 1000; // Convert to ms
+
+// Create a Supabase client for server components with optimized connection handling
 export async function createClient() {
   await checkEnvironmentVariables();
+  
+  // Use cookie store
   const cookieStore = await cookies();
-
+  
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -64,6 +70,7 @@ export async function createClient() {
             cookieStore.set({ name, value, ...options });
           } catch (error) {
             // Handle cookie setting error
+            console.warn('Failed to set cookie:', error);
           }
         },
         remove(name: string, options) {
@@ -71,87 +78,143 @@ export async function createClient() {
             cookieStore.set({ name, value: '', ...options });
           } catch (error) {
             // Handle cookie removal error
+            console.warn('Failed to remove cookie:', error);
           }
         },
       },
+      // Global error handler for better debugging
+      global: {
+        fetch: async (url, options) => {
+          const start = Date.now();
+          try {
+            return await fetch(url, options);
+          } catch (error) {
+            console.error(`Supabase fetch error: ${url}`, error);
+            throw error;
+          } finally {
+            const duration = Date.now() - start;
+            if (duration > 1000) { // Log slow queries (>1s)
+              console.warn(`Slow Supabase query: ${duration}ms - ${url}`);
+            }
+          }
+        }
+      }
     }
   );
 }
 
-// Database operations
+// Helper for cached database operations
+async function cachedQuery<T>(
+  cacheKey: string, 
+  queryFn: () => Promise<T>, 
+  ttl: number = CACHE_DURATION
+): Promise<T> {
+  const cached = queryCache.get(cacheKey);
+  const now = Date.now();
+  
+  if (cached && (now - cached.timestamp < ttl)) {
+    return cached.data as T;
+  }
+  
+  // Clear expired entries periodically
+  if (now % 60000 < 1000) { // Approximately once a minute
+    for (const [key, value] of queryCache.entries()) {
+      if (now - value.timestamp > ttl) {
+        queryCache.delete(key);
+      }
+    }
+  }
+  
+  // Execute the query
+  const result = await queryFn();
+  
+  // Cache the result
+  queryCache.set(cacheKey, { data: result, timestamp: now });
+  
+  return result;
+}
+
+// Database operations with caching for read operations
 export async function getTopics(page = 1, limit = 10) {
   const supabase = await createClient();
   const start = (page - 1) * limit;
   
-  const { data, error, count } = await supabase
-    .from('topics')
-    .select(`
-      *,
-      author: profiles (
-        id,
-        email,
-        full_name
-      ),
-      category: categories (
-        id,
-        name
-      ),
-      _count
-    `, { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(start, start + limit - 1);
+  // Use caching for public data
+  return cachedQuery(`topics_p${page}_l${limit}`, async () => {
+    const { data, error, count } = await supabase
+      .from('topics')
+      .select(`
+        *,
+        author: profiles (
+          id,
+          email,
+          full_name
+        ),
+        category: categories (
+          id,
+          name
+        ),
+        _count
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(start, start + limit - 1);
 
-  if (error) {
-    console.error('Database error:', error);
-    throw error;
-  }
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
-  return {
-    topics: data,
-    totalCount: count,
-    currentPage: page,
-    totalPages: Math.ceil((count || 0) / limit)
-  };
+    return {
+      topics: data,
+      totalCount: count,
+      currentPage: page,
+      totalPages: Math.ceil((count || 0) / limit)
+    };
+  }, 60000); // 1 minute cache for topics list, refreshed more frequently
 }
 
 export async function getTopic(id: string) {
   const supabase = await createClient();
   
-  const { data, error } = await supabase
-    .from('topics')
-    .select(`
-      *,
-      author: profiles (
-        id,
-        email,
-        full_name
-      ),
-      category: categories (
-        id,
-        name
-      ),
-      comments (
-        id,
-        content,
-        created_at,
+  // Individual topics can be cached longer
+  return cachedQuery(`topic_${id}`, async () => {
+    const { data, error } = await supabase
+      .from('topics')
+      .select(`
+        *,
         author: profiles (
           id,
           email,
           full_name
+        ),
+        category: categories (
+          id,
+          name
+        ),
+        comments (
+          id,
+          content,
+          created_at,
+          author: profiles (
+            id,
+            email,
+            full_name
+          )
         )
-      )
-    `)
-    .eq('id', id)
-    .single();
+      `)
+      .eq('id', id)
+      .single();
 
-  if (error) {
-    console.error('Database error:', error);
-    throw error;
-  }
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
-  return data;
+    return data;
+  });
 }
 
+// Write operations bypass cache
 export async function createTopic(data: any) {
   const supabase = await createClient();
   
@@ -165,6 +228,12 @@ export async function createTopic(data: any) {
     console.error('Database error:', error);
     throw error;
   }
+  
+  // Invalidate topics list cache
+  const keysToInvalidate = Array.from(queryCache.keys())
+    .filter(key => key.startsWith('topics_p'));
+  
+  keysToInvalidate.forEach(key => queryCache.delete(key));
 
   return topic;
 }

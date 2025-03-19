@@ -2,10 +2,11 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Rate limiting configuration
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const MAX_REQUESTS = 100; // Maximum requests per window
-const rateLimitStore: { [key: string]: { count: number; timestamp: number } } = {};
+// Rate limiting configuration - use environment variables with fallbacks
+const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW || '60000', 10); // 1 minute default
+const MAX_REQUESTS = parseInt(process.env.MAX_REQUESTS_PER_WINDOW || '100', 10); // 100 requests default
+// Using a more efficient memory store implementation for high traffic
+const rateLimitStore: Map<string, { count: number; timestamp: number }> = new Map();
 
 // Protected routes configuration
 const protectedRoutes = [
@@ -28,39 +29,47 @@ const adminRoutes = [
   '/admin/settings',
 ];
 
-// Public routes that don't need rate limiting
+// Public routes that don't need rate limiting - extended for static assets
 const publicRoutes = [
   '/public',
   '/_next',
   '/static',
   '/api/health',
+  '/images',
+  '/fonts',
+  '/favicon.ico',
+  '/manifest.json',
+  '/robots.txt',
 ];
 
-// Rate limiting function with IP and path based limits
+// More efficient rate limiting implementation for high traffic
 function checkRateLimit(ip: string, path: string): boolean {
   const now = Date.now();
   const key = `${ip}:${path}`;
   
-  // Clean up old entries
-  Object.keys(rateLimitStore).forEach(k => {
-    if (now - rateLimitStore[k].timestamp > RATE_LIMIT_WINDOW) {
-      delete rateLimitStore[k];
-    }
-  });
-  
-  // Skip rate limiting for public routes
+  // Skip rate limiting for public routes first - early return for efficiency
   if (publicRoutes.some(route => path.startsWith(route))) {
     return true;
   }
   
-  if (!rateLimitStore[key]) {
-    rateLimitStore[key] = { count: 1, timestamp: now };
+  // Clean up old entries periodically instead of on every request
+  if (now % 10000 < 100) { // Clean approximately every 10 seconds
+    for (const [k, v] of rateLimitStore.entries()) {
+      if (now - v.timestamp > RATE_LIMIT_WINDOW) {
+        rateLimitStore.delete(k);
+      }
+    }
+  }
+  
+  const userLimit = rateLimitStore.get(key);
+  
+  if (!userLimit) {
+    rateLimitStore.set(key, { count: 1, timestamp: now });
     return true;
   }
   
-  const userLimit = rateLimitStore[key];
   if (now - userLimit.timestamp > RATE_LIMIT_WINDOW) {
-    rateLimitStore[key] = { count: 1, timestamp: now };
+    rateLimitStore.set(key, { count: 1, timestamp: now });
     return true;
   }
   
@@ -84,7 +93,7 @@ const securityHeaders = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
 };
 
-// Error response helper
+// Error response helper with caching headers for CDN
 function errorResponse(status: number, message: string) {
   return new NextResponse(
     JSON.stringify({ 
@@ -96,19 +105,30 @@ function errorResponse(status: number, message: string) {
       status,
       headers: {
         'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, max-age=0',
         ...securityHeaders
       }
     }
   );
 }
 
+// Cache helper for response caching
+function addCacheHeaders(res: NextResponse, cacheable: boolean = false) {
+  if (cacheable) {
+    res.headers.set('Cache-Control', `public, max-age=${process.env.CACHE_DURATION || '3600'}, s-maxage=${process.env.CACHE_DURATION || '3600'}`);
+  } else {
+    res.headers.set('Cache-Control', 'no-store, max-age=0');
+  }
+  return res;
+}
+
 export async function middleware(req: NextRequest) {
   try {
     // Apply rate limiting
-    const ip = req.ip ?? req.headers.get('x-forwarded-for') ?? 'unknown';
+    const clientIp = req.headers.get('x-forwarded-for') ?? 'unknown';
     const path = req.nextUrl.pathname;
 
-    if (!checkRateLimit(ip, path)) {
+    if (!checkRateLimit(clientIp, path)) {
       return errorResponse(429, 'Too Many Requests');
     }
 
@@ -186,7 +206,15 @@ export async function middleware(req: NextRequest) {
       res.headers.set('X-User-Role', isAdmin() ? 'admin' : 'user');
     }
     
-    return res;
+    // Add caching headers for public, cacheable routes
+    const isCacheable = 
+      (path === '/' || 
+       path.startsWith('/forum') || 
+       path.startsWith('/search')) && 
+      req.method === 'GET' && 
+      !user; // Only cache for anonymous users
+    
+    return addCacheHeaders(res, isCacheable);
   } catch (error) {
     console.error('Middleware error:', error);
     return errorResponse(500, 'Internal Server Error');
