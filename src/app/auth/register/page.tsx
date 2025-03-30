@@ -145,7 +145,7 @@ export default function RegisterPage() {
             </TabsList>
             
             <TabsContent value="email" className="space-y-4">
-              <Form {...form} onSubmit={onSubmit}>
+              <Form {...form} onSubmit={form.handleSubmit(onSubmit)}>
                 <FormField
                   control={form.control}
                   name="full_name"

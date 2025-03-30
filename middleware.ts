@@ -54,11 +54,11 @@ function checkRateLimit(ip: string, path: string): boolean {
   
   // Clean up old entries periodically instead of on every request
   if (now % 10000 < 100) { // Clean approximately every 10 seconds
-    for (const [k, v] of rateLimitStore.entries()) {
-      if (now - v.timestamp > RATE_LIMIT_WINDOW) {
-        rateLimitStore.delete(k);
+    Array.from(rateLimitStore.entries()).forEach(([key, value]) => {
+      if (now - value.timestamp > RATE_LIMIT_WINDOW) {
+        rateLimitStore.delete(key);
       }
-    }
+    });
   }
   
   const userLimit = rateLimitStore.get(key);
@@ -122,150 +122,94 @@ function addCacheHeaders(res: NextResponse, cacheable: boolean = false) {
   return res;
 }
 
-export async function middleware(req: NextRequest) {
-  try {
-    // Apply rate limiting
-    const clientIp = req.headers.get('x-forwarded-for') ?? 'unknown';
-    const path = req.nextUrl.pathname;
-
-    if (!checkRateLimit(clientIp, path)) {
-      return errorResponse(429, 'Too Many Requests');
-    }
-
-    // Create a response to modify
-    let response = NextResponse.next();
-    
-    // Create Supabase client - Updated for Next.js 15
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name) {
-            return req.cookies.get(name)?.value
-          },
-          set(name, value, options) {
-            req.cookies.set({
-              name,
-              value,
-              ...options,
-            })
-            response = NextResponse.next({
-              request: {
-                headers: req.headers,
-              },
-            })
-            response.cookies.set({
-              name,
-              value,
-              ...options,
-            })
-          },
-          remove(name, options) {
-            req.cookies.set({
-              name,
-              value: '',
-              ...options,
-              maxAge: 0,
-            })
-            response = NextResponse.next({
-              request: {
-                headers: req.headers,
-              },
-            })
-            response.cookies.set({
-              name,
-              value: '',
-              ...options,
-              maxAge: 0,
-            })
-          },
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next()
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
         },
-      }
-    );
+        set(name: string, value: string, options: any) {
+          request.cookies.set({ name, value, ...options })
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set(name, value, options)
+        },
+        remove(name: string, options: any) {
+          request.cookies.set({ name, value: '', ...options })
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set(name, '', options)
+        },
+      },
+    }
+  )
+
+  // Get user session
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Admin role verification
+  const isAdmin = () => {
+    if (!user) return false
     
-    // Add security headers
-    Object.entries(securityHeaders).forEach(([key, value]) => {
-      response.headers.set(key, value);
-    });
-    
-    // IMPORTANT: Avoid logic between createServerClient and getUser
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    // SEO-friendly URL structure
-    if (path !== path.toLowerCase()) {
-      return NextResponse.redirect(new URL(path.toLowerCase(), req.url));
+    // Development environment check
+    if (process.env.NODE_ENV === 'development' && 
+        process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true' &&
+        process.env.DEVELOPMENT_ADMIN_EMAIL === user.email) {
+      return true
     }
     
-    // Legacy URL structure redirection
-    if (path === '/(forum)' || path.startsWith('/(forum)/')) {
-      const newPath = path.replace(/^\/(forum)/, '/forum');
-      console.log(`Redirecting: ${path} -> ${newPath}`);
-      return NextResponse.redirect(new URL(newPath, req.url));
-    }
-    
-    // Admin role verification with enhanced security
-    const isAdmin = () => {
-      if (!user) return false;
-      
-      // Development environment check with additional security
-      if (process.env.NODE_ENV === 'development' && 
-          process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true' &&
-          process.env.DEVELOPMENT_ADMIN_EMAIL === user.email) {
-        return true;
-      }
-      
-      return user.email?.endsWith('@thy.com') || 
-             user.app_metadata?.roles?.includes('admin') || 
-             false;
-    };
-    
-    // Protected route access control
-    if (protectedRoutes.some(route => path.startsWith(route))) {
-      if (!user) {
-        const redirectUrl = new URL('/auth/login', req.url);
-        redirectUrl.searchParams.set('redirectTo', path);
-        return NextResponse.redirect(redirectUrl);
-      }
-    }
-    
-    // Admin route access control with enhanced security
-    if (adminRoutes.some(route => path.startsWith(route))) {
-      if (!user || !isAdmin()) {
-        console.warn(`Unauthorized admin access attempt: ${path} by ${user?.email ?? 'unknown'}`);
-        return NextResponse.redirect(new URL('/', req.url));
-      }
-    }
-    
-    // Authenticated user redirection from auth pages
-    if (user && (path.startsWith('/auth/login') || path.startsWith('/auth/register'))) {
-      return NextResponse.redirect(new URL('/', req.url));
-    }
-    
-    // Add user context to headers for logging
-    if (user) {
-      response.headers.set('X-User-Id', user.id);
-      response.headers.set('X-User-Role', isAdmin() ? 'admin' : 'user');
-    }
-    
-    // Add caching headers for public, cacheable routes
-    const isCacheable = 
-      (path === '/' || 
-       path.startsWith('/forum') || 
-       path.startsWith('/search')) && 
-      req.method === 'GET' && 
-      !user; // Only cache for anonymous users
-    
-    return addCacheHeaders(response, isCacheable);
-  } catch (error) {
-    console.error('Middleware error:', error);
-    return errorResponse(500, 'Internal Server Error');
+    return user.email?.endsWith('@thy.com') || 
+           user.app_metadata?.roles?.includes('admin') || 
+           false
   }
+
+  // Protected route access control
+  if (protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+    if (!user) {
+      const redirectUrl = new URL('/auth/login', request.url)
+      redirectUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
+  // Admin route access control
+  if (adminRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+    if (!user || !isAdmin()) {
+      console.warn(`Unauthorized admin access attempt: ${request.nextUrl.pathname} by ${user?.email ?? 'unknown'}`)
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+  }
+
+  // Authenticated user redirection from auth pages
+  if (user && (request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/register'))) {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // Add caching headers for public, cacheable routes
+  const isCacheable = 
+    (request.nextUrl.pathname === '/' || 
+     request.nextUrl.pathname.startsWith('/forum') || 
+     request.nextUrl.pathname.startsWith('/search')) && 
+    request.method === 'GET' && 
+    !user; // Only cache for anonymous users
+
+  return addCacheHeaders(response, isCacheable);
 }
 
 // Middleware matcher configuration
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

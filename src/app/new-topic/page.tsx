@@ -13,7 +13,7 @@ import { cn, slugify } from "@/lib/utils";
 import { ArrowLeft, Image as ImageIcon, Link as LinkIcon, Paperclip, Send, AlertTriangle, Lightbulb, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Editor } from '@tinymce/tinymce-react';
+import { Editor as TinyMCEEditor } from '@tinymce/tinymce-react';
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 // Entegrasyon için TinyMCE API anahtarı (gerçek bir anahtar ile değiştirin)
@@ -74,22 +74,37 @@ const topicTypes = [
   { id: "poll", name: "Anket", icon: "bar-chart-2" },
 ];
 
+// Define types for our component
+interface UploadedImage {
+  id: string;
+  name: string;
+  size: number;
+  url: string;
+  type: string;
+}
+
+interface ValidationErrors {
+  title: string;
+  content: string;
+  category: string;
+}
+
 export default function NewTopicPage() {
   const router = useRouter();
   const supabase = createClientComponentClient();
-  const editorRef = useRef(null);
+  const editorRef = useRef<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [content, setContent] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedTopicType, setSelectedTopicType] = useState("discussion");
-  const [tags, setTags] = useState([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
-  const [uploadedImages, setUploadedImages] = useState([]);
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const [previewContent, setPreviewContent] = useState("");
-  const [validationErrors, setValidationErrors] = useState({
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({
     title: "",
     content: "",
     category: "",
@@ -102,14 +117,14 @@ export default function NewTopicPage() {
     }
   }, [title]);
 
-  const handleTabChange = (value) => {
+  const handleTabChange = (value: string) => {
     if (value === "preview" && editorRef.current) {
       setPreviewContent(editorRef.current.getContent());
     }
   };
 
   const validateForm = () => {
-    const errors = {
+    const errors: ValidationErrors = {
       title: "",
       content: "",
       category: "",
@@ -142,15 +157,15 @@ export default function NewTopicPage() {
     }
   };
 
-  const handleTagRemove = (tag) => {
+  const handleTagRemove = (tag: string) => {
     setTags(tags.filter(t => t !== tag));
   };
 
-  const handleImageUpload = (event) => {
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
       // Gerçek bir uygulamada burası bir bulut depolama servisine yükleme yapacaktır
-      const newImages = Array.from(files).map(file => ({
+      const newImages: UploadedImage[] = Array.from(files).map(file => ({
         id: Math.random().toString(36).substring(7),
         name: file.name,
         size: file.size,
@@ -161,7 +176,7 @@ export default function NewTopicPage() {
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (editorRef.current) {
@@ -204,17 +219,19 @@ export default function NewTopicPage() {
       // Yeni konuyu oluştur
       const { data, error } = await supabase
         .from('topics')
-        .insert([
-          { 
-            title, 
-            content,
-            slug: uniqueSlug,
-            user_id: userId,
-            category_id: selectedCategory,
-            topic_type: selectedTopicType,
-            tags: tags.length > 0 ? tags : null,
-          }
-        ])
+        .insert({
+          title, 
+          content,
+          slug: uniqueSlug,
+          user_id: userId,
+          category_id: selectedCategory,
+          topic_type: selectedTopicType,
+          tags: tags.length > 0 ? tags : [],
+          created_at: new Date().toISOString(),
+          comments_count: 0,
+          views: 0,
+          likes_count: 0
+        })
         .select();
       
       if (error) {
@@ -359,9 +376,9 @@ export default function NewTopicPage() {
                       <TabsTrigger value="preview">Önizleme</TabsTrigger>
                     </TabsList>
                     <TabsContent value="write" className="min-h-[300px]">
-                      <Editor
+                      <TinyMCEEditor
                         apiKey={TINYMCE_API_KEY}
-                        onInit={(evt, editor) => editorRef.current = editor}
+                        onInit={(evt: any, editor: any) => editorRef.current = editor}
                         initialValue=""
                         init={editorConfig}
                       />
@@ -408,7 +425,7 @@ export default function NewTopicPage() {
                       placeholder="Etiket ekleyin"
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleTagAdd())}
+                      onKeyPress={(e: React.KeyboardEvent) => e.key === 'Enter' && (e.preventDefault(), handleTagAdd())}
                       disabled={tags.length >= 5}
                     />
                     <Button

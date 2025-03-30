@@ -158,7 +158,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (href === "/admin") {
       return pathname === "/admin";
     }
-    return pathname.startsWith(href);
+    return pathname?.startsWith(href);
   };
 
   if (loading) {
@@ -264,7 +264,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         <Button
                           key={subitem.href}
                           asChild
-                          variant={pathname === subitem.href ? "secondary" : "ghost"}
+                          variant={pathname === subitem.href || pathname?.startsWith(subitem.href) ? "secondary" : "ghost"}
                           className="w-full justify-start"
                           size="sm"
                         >

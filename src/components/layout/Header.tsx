@@ -119,19 +119,36 @@ export function Header() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
-      setLoading(false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log("Current session:", session?.user ? "Logged in" : "No session");
+        
+        setUser(session?.user || null);
+        setLoading(false);
 
-      const { data: authListener } = supabase.auth.onAuthStateChange(
-        (event, session) => {
-          setUser(session?.user || null);
-        }
-      );
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+          (event, newSession) => {
+            // Log auth state changes but ignore initial session check
+            if (event !== 'INITIAL_SESSION') {
+              console.log("Auth state change:", event, newSession?.user?.id);
+            }
+            
+            setUser(newSession?.user || null);
+            
+            // On sign in, show welcome notification
+            if (event === 'SIGNED_IN') {
+              toast.success(`Hoş geldiniz, ${newSession?.user?.user_metadata?.name || newSession?.user?.email?.split('@')[0]}`);
+            }
+          }
+        );
 
-      return () => {
-        authListener?.subscription.unsubscribe();
-      };
+        return () => {
+          authListener?.subscription.unsubscribe();
+        };
+      } catch (error) {
+        console.error("Error checking session:", error);
+        setLoading(false);
+      }
     };
 
     checkUser();
@@ -141,8 +158,21 @@ export function Header() {
     setIsMenuOpen(false);
     try {
       await supabase.auth.signOut();
+      
+      // Clear user state
+      setUser(null);
+      
+      // Optional: Clear any session data from localStorage
+      localStorage.removeItem('supabase.auth.token');
+      
       toast.success("Başarıyla çıkış yapıldı.");
+      
+      // Optional: Redirect to home page after a short delay
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
     } catch (error) {
+      console.error("Error signing out:", error);
       toast.error("Çıkış yaparken bir hata oluştu.");
     }
   };
@@ -195,7 +225,7 @@ export function Header() {
                   href={item.href}
                   className={cn(
                     "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary",
-                    pathname === item.href || pathname.startsWith(item.href)
+                    pathname === item.href || pathname?.startsWith(item.href)
                       ? "text-foreground"
                       : "text-muted-foreground"
                   )}
@@ -220,7 +250,7 @@ export function Header() {
                 href={item.href}
                 className={cn(
                   "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary",
-                  pathname === item.href || pathname.startsWith(item.href)
+                  pathname === item.href || pathname?.startsWith(item.href)
                     ? "text-foreground"
                     : "text-muted-foreground"
                 )}
@@ -401,7 +431,7 @@ export function Header() {
                         href={item.href}
                         className={cn(
                           "group flex items-center rounded-md px-2 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                          pathname === item.href
+                          pathname === item.href || pathname?.startsWith(item.href)
                             ? "bg-accent"
                             : "transparent"
                         )}
@@ -436,7 +466,7 @@ export function Header() {
                         href={item.href}
                         className={cn(
                           "group flex items-center rounded-md px-2 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                          pathname === item.href
+                          pathname === item.href || pathname?.startsWith(item.href)
                             ? "bg-accent"
                             : "transparent"
                         )}

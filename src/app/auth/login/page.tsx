@@ -17,8 +17,8 @@ import { Separator } from "@/components/ui/separator";
 // Component to handle search params that needs to be wrapped in Suspense
 function SearchParamsHandler() {
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirectTo') || '/';
-  const tab = searchParams.get('tab') || 'login';
+  const redirectTo = searchParams?.get('redirectTo') || '/';
+  const tab = searchParams?.get('tab') || 'login';
   
   return { searchParams, redirectTo, tab };
 }
@@ -55,7 +55,10 @@ function LoginPageContent() {
     // URL'deki tab parametresini kontrol et
     if (tab && (tab === 'login' || tab === 'register')) {
       // Tab değerini ayarla
-      document.querySelector(`button[value="${tab}"]`)?.click();
+      const element = document.querySelector(`button[value="${tab}"]`);
+      if (element) {
+        (element as HTMLButtonElement).click();
+      }
     }
   }, [tab]);
   
@@ -94,24 +97,31 @@ function LoginPageContent() {
     setIsLoading(true);
     
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
       if (error) {
-        throw error;
+        if (error.message.includes("Invalid login")) {
+          toast.error("Geçersiz kullanıcı adı veya şifre");
+        } else if (error.message.includes("Email not confirmed")) {
+          toast.error("E-posta adresiniz henüz doğrulanmamış. Lütfen e-postanızı kontrol edin.");
+        } else {
+          toast.error(`Giriş yapılamadı: ${error.message}`);
+        }
+        console.error("Sign in error:", error);
+        return;
       }
       
       toast.success("Başarıyla giriş yapıldı");
-      router.push(redirectTo);
-      router.refresh();
+      
+      // Allow state to update before redirect
+      setTimeout(() => {
+        window.location.href = redirectTo || '/';
+      }, 500);
     } catch (error: any) {
-      if (error.message.includes("Invalid login")) {
-        toast.error("Geçersiz kullanıcı adı veya şifre");
-      } else {
-        toast.error("Giriş yaparken bir hata oluştu");
-      }
+      toast.error("Giriş yaparken bir hata oluştu");
       console.error("Sign in error:", error);
     } finally {
       setIsLoading(false);

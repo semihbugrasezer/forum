@@ -1,8 +1,21 @@
-import { updateSession } from '@/lib/supabase/middleware'
-import { NextRequest, NextResponse } from 'next/server'
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  return await updateSession(request)
+  try {
+    const res = NextResponse.next()
+    const supabase = createMiddlewareClient({ 
+      req: request, 
+      res 
+    })
+    
+    await supabase.auth.getSession()
+    return res
+  } catch (error) {
+    console.error('Middleware error:', error)
+    return NextResponse.next()
+  }
 }
 
 export const config = {
@@ -16,4 +29,4 @@ export const config = {
      */
     '/((?!_next/static|_next/image|favicon.ico|public).*)',
   ],
-} 
+}
