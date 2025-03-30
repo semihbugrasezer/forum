@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createServerActionClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient as createSupabaseServerClient } from "@supabase/ssr";
 import { type Provider } from "@supabase/supabase-js";
 
 export async function signUp(emailOrFormData: string | FormData, password?: string, name?: string) {
@@ -114,7 +114,7 @@ export async function requireAuth() {
 
 export async function signInWithProvider(provider: Provider) {
   const cookieStore = await cookies();
-  const supabase = createServerActionClient({ cookies: () => cookieStore });
+  const supabase = createServerClient(cookieStore);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
@@ -131,7 +131,7 @@ export async function signInWithProvider(provider: Provider) {
 
 export async function getUser() {
   const cookieStore = await cookies();
-  const supabase = createServerActionClient({ cookies: () => cookieStore });
+  const supabase = createServerClient(cookieStore);
   const { data: { session } } = await supabase.auth.getSession();
   
   if (!session?.user) {

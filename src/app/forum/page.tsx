@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClientComponentClient } from '@/utils/supabase/client';
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import Head from "next/head";
 import { useRouter } from "next/navigation";

@@ -14,7 +14,7 @@ import { ArrowLeft, Image as ImageIcon, Link as LinkIcon, Paperclip, Send, Alert
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Editor as TinyMCEEditor } from '@tinymce/tinymce-react';
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClientComponentClient } from '@/utils/supabase/client';
 
 // Entegrasyon için TinyMCE API anahtarı (gerçek bir anahtar ile değiştirin)
 const TINYMCE_API_KEY = process.env.NEXT_PUBLIC_TINYMCE_API_KEY || 'your_tinymce_api_key';

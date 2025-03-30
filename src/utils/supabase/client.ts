@@ -27,3 +27,8 @@ export const createBrowserClient = () => {
 export function createClient() {
   return createBrowserClient();
 }
+
+// Drop-in replacement for the deprecated createClientComponentClient
+export function createClientComponentClient() {
+  return createBrowserClient();
+}

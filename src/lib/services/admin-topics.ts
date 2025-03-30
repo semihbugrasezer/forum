@@ -1,4 +1,4 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClientComponentClient } from '@/utils/supabase/client';
 
 export async function getTopics(categoryId?: string) {
   const supabase = createClientComponentClient();
