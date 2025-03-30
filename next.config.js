@@ -15,7 +15,7 @@ const nextConfig = {
   serverExternalPackages: ["@supabase/ssr"],
   experimental: {
     esmExternals: true,
-    serverActions: true,
+    serverActions: {},
   },
   typescript: {
     ignoreBuildErrors: true,
