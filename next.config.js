@@ -15,12 +15,16 @@ const nextConfig = {
   serverExternalPackages: ["@supabase/ssr"],
   experimental: {
     esmExternals: true,
+    serverActions: true,
   },
   typescript: {
     ignoreBuildErrors: true,
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  webpack: (config) => {
+    return config;
   },
 };
 
