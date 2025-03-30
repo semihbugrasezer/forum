@@ -4,6 +4,169 @@ import { revalidatePath } from 'next/cache';
 import { createSlug } from '@/lib/utils';
 import { getUser } from './auth';
 import { createClient } from '@/lib/supabase/server';
+import { PostgrestQueryBuilder } from '@supabase/postgrest-js';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+declare module '@supabase/supabase-js' {
+  interface SupabaseClient {
+    rpc(
+      fn: 'increment_topic_count' | 'decrement_topic_count' | 'increment_comment_count' | 'increment_view_count',
+      params: Record<string, any>
+    ): Promise<any>;
+    from<T extends keyof Database['Tables'] | keyof Database['Views']>(
+      table: T
+    ): T extends keyof Database['Tables']
+      ? PostgrestQueryBuilder<Database, Database['Tables'][T], any, any>
+      : T extends keyof Database['Views']
+      ? PostgrestQueryBuilder<Database, Database['Views'][T], any, any>
+      : never;
+  }
+}
+
+// Add utility types for Supabase operations
+type PostgresError = {
+  message: string;
+  details: string;
+  hint?: string;
+  code: string;
+};
+
+type QueryResult<T> = {
+  data: T | null;
+  error: PostgresError | null;
+};
+
+// Update Database interface
+interface Database {
+  Tables: {
+    topics: {
+      Row: {
+        id: string;
+        title: string;
+        content: string;
+        slug: string;
+        user_id: string;
+        category_id?: string;
+        tags: string[];
+        created_at: string;
+        updated_at?: string;
+        comments_count: number;
+        views: number;
+        likes_count: number;
+      };
+      Insert: Omit<Database['Tables']['topics']['Row'], 'id' | 'updated_at'>;
+      Update: Partial<Database['Tables']['topics']['Row']>;
+      Relationships: [
+        {
+          foreignKeyName: "topics_user_id_fkey"
+          columns: ["user_id"]
+          referencedRelation: "profiles"
+          referencedColumns: ["id"]
+        },
+        {
+          foreignKeyName: "topics_category_id_fkey"
+          columns: ["category_id"]
+          referencedRelation: "categories"
+          referencedColumns: ["id"]
+        }
+      ];
+    };
+    topic_tags: {
+      Row: {
+        topic_id: string;
+        tag_id: string;
+      };
+      Insert: {
+        topic_id: string;
+        tag_id: string;
+      };
+      Update: {
+        topic_id?: string;
+        tag_id?: string;
+      };
+      Relationships: [
+        {
+          foreignKeyName: "topic_tags_topic_id_fkey"
+          columns: ["topic_id"]
+          referencedRelation: "topics"
+          referencedColumns: ["id"]
+        },
+        {
+          foreignKeyName: "topic_tags_tag_id_fkey" 
+          columns: ["tag_id"]
+          referencedRelation: "tags"
+          referencedColumns: ["id"]
+        }
+      ];
+    };
+    tags: {
+      Row: {
+        id: string;
+        name: string;
+      };
+      Insert: Omit<Database['Tables']['tags']['Row'], 'id'>;
+      Update: Partial<Database['Tables']['tags']['Row']>;
+      Relationships: [
+        {
+          foreignKeyName: "tags_id_fkey"
+          columns: ["id"]
+          referencedRelation: "topic_tags"
+          referencedColumns: ["tag_id"]
+        }
+      ];
+    };
+    comments: {
+      Row: {
+        id: string;
+        topic_id: string;
+        content: string;
+        user_id: string;
+        created_at: string;
+        updated_at?: string;
+      };
+      Insert: Omit<Database['Tables']['comments']['Row'], 'id' | 'updated_at'>;
+      Update: Partial<Database['Tables']['comments']['Row']>;
+      Relationships: [
+        {
+          foreignKeyName: "comments_topic_id_fkey"
+          columns: ["topic_id"]
+          referencedRelation: "topics"
+          referencedColumns: ["id"]
+        },
+        {
+          foreignKeyName: "comments_user_id_fkey"
+          columns: ["user_id"]
+          referencedRelation: "profiles"
+          referencedColumns: ["id"]
+        }
+      ];
+    };
+  };
+  Views: Record<string, never>;
+  Functions: {
+    increment_topic_count: {
+      Args: { category_id: string };
+      Returns: void;
+    };
+    decrement_topic_count: {
+      Args: { category_id: string };
+      Returns: void;  
+    };
+    increment_comment_count: {
+      Args: { topic_id: string };
+      Returns: void;
+    };
+    increment_view_count: {
+      Args: { topic_id: string };
+      Returns: void;
+    };
+  };
+}
+
+// Add type guard for database results
+function isQueryError(result: QueryResult<any>): result is QueryResult<any> & { error: PostgresError } {
+  return !!(result && result.error);
+}
 
 /**
  * Yeni bir konu oluşturur
@@ -44,22 +207,24 @@ export async function createTopic(formDataOrParams: FormData | {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '');
 
+    const topicData: Database['Tables']['topics']['Insert'] = {
+      title,
+      content,
+      slug,
+      tags,
+      category_id,
+      user_id: user.id,
+      created_at: new Date().toISOString(),
+      comments_count: 0,
+      views: 0,
+      likes_count: 0
+    };
+
     const { data: topic, error: topicError } = await supabase
       .from("topics")
-      .insert({
-        title,
-        content,
-        slug,
-        tags,
-        category_id,
-        author_id: user.id,
-        created_at: new Date().toISOString(),
-        comment_count: 0,
-        view_count: 0,
-        like_count: 0
-      })
-      .select()
-      .single();
+      .insert(topicData)
+      .select('*')
+      .single() as QueryResult<Database['Tables']['topics']['Row']>;
 
     if (topicError) {
       return { error: topicError.message };
@@ -96,27 +261,40 @@ export async function updateTopic(topicId: string, { title, content, category_id
       return { error: 'Veritabanı bağlantısı kurulamadı' };
     }
     
-    const { data: existingTopic, error: checkError } = await supabase
+    const result = await supabase
       .from('topics')
       .select('user_id, category_id')
       .eq('id', topicId)
-      .single();
+      .single() as QueryResult<Pick<Database['Tables']['topics']['Row'], 'user_id' | 'category_id'>>;
+
+    if (isQueryError(result) || !result.data) {
+      return { error: 'Topic not found' };
+    }
+
+    const existingTopic = result.data;
     
-    if (checkError || existingTopic.user_id !== user.id) return { error: 'Yetkiniz yok' };
+    if (existingTopic.user_id !== user.id) return { error: 'Yetkiniz yok' };
     
     const slug = createSlug(title);
     const tagArray = processTags(tags);
     
     const { data, error } = await supabase
       .from('topics')
-      .update({ title, content, slug, category_id, updated_at: new Date().toISOString(), tags: tagArray })
+      .update({
+        title,
+        content,
+        slug,
+        category_id,
+        updated_at: new Date().toISOString(),
+        tags: tagArray
+      } as Database['Tables']['topics']['Update'])
       .eq('id', topicId)
       .select()
-      .single();
+      .single() as QueryResult<Database['Tables']['topics']['Row']>;
     
     if (error) return { error: error.message };
     
-    if (category_id && existingTopic.category_id !== category_id) {
+    if (category_id && existingTopic?.category_id !== category_id) {
       await supabase.rpc('decrement_topic_count', { category_id: existingTopic.category_id });
       await supabase.rpc('increment_topic_count', { category_id });
     }
@@ -146,13 +324,15 @@ export async function deleteTopic(topicId: string) {
       return { error: 'Veritabanı bağlantısı kurulamadı' };
     }
     
-    const { data: existingTopic, error: checkError } = await supabase
+    const result = await supabase
       .from('topics')
       .select('user_id, category_id')
       .eq('id', topicId)
-      .single();
+      .single() as QueryResult<Pick<Database['Tables']['topics']['Row'], 'user_id' | 'category_id'>>;
     
-    if (checkError || existingTopic.user_id !== user.id) return { error: 'Yetkiniz yok' };
+    if (isQueryError(result) || !result.data || result.data.user_id !== user.id) return { error: 'Yetkiniz yok' };
+    
+    const existingTopic = result.data;
     
     await supabase.from('topic_tags').delete().eq('topic_id', topicId);
     await supabase.from('comments').delete().eq('topic_id', topicId);
@@ -224,78 +404,94 @@ function revalidatePaths(paths: string[]) {
   paths.forEach(path => path && revalidatePath(path));
 }
 
-export async function getTopicBySlug(slug: string) {
-  if (!slug) {
-    console.error("getTopicBySlug: No slug provided");
-    return null;
-  }
+interface Topic {
+  id: string;
+  title: string;
+  content: string;
+  slug: string;
+  author_id: string;
+  category_id?: string;
+  tags: string[];
+  created_at: string;
+  updated_at?: string;
+  comment_count: number;
+  view_count: number;
+  like_count: number;
+}
 
+function mapDbTopicToTopic(dbTopic: Database['Tables']['topics']['Row']): Topic {
+  assertTopicResult(dbTopic);
+  return {
+    id: dbTopic.id,
+    title: dbTopic.title,
+    content: dbTopic.content, 
+    slug: dbTopic.slug,
+    author_id: dbTopic.user_id,
+    category_id: dbTopic.category_id,
+    tags: dbTopic.tags || [],
+    created_at: dbTopic.created_at,
+    updated_at: dbTopic.updated_at,
+    comment_count: dbTopic.comments_count,
+    view_count: dbTopic.views,
+    like_count: dbTopic.likes_count
+  };
+}
+
+function assertTopicResult(result: unknown): asserts result is Database['Tables']['topics']['Row'] {
+  if (!result || typeof result !== 'object') {
+    throw new Error('Invalid topic result');
+  }
+}
+
+export async function getTopicBySlug(slugOrId: string): Promise<Topic | null> {
   try {
-    // Get the supabase client
-    let supabase;
-    try {
-      supabase = await createClient();
-      if (!supabase) {
-        console.error("getTopicBySlug: Supabase client is null");
-        return null;
-      }
-    } catch (error) {
-      console.error("getTopicBySlug: Failed to create Supabase client:", error);
-      return null;
-    }
-    
-    // Try to get topic by slug first
-    try {
-      // Try by slug
-      const result = await supabase
-        .from("topics")
+    const supabase = await createClient();
+    if (!supabase) throw new Error("Failed to create Supabase client");
+
+    type TopicResponse = Database['Tables']['topics']['Row'] & {
+      profiles: { username: string; avatar_url: string; }[];
+      categories: { name: string; slug: string; }[];
+    };
+
+    const query = supabase
+      .from('topics')
+      .select(`
+        *,
+        profiles (username, avatar_url),
+        categories (name, slug)
+      `)
+      .eq('slug', slugOrId)
+      .single() as unknown as Promise<QueryResult<TopicResponse>>;
+
+    const { data, error } = await query;
+
+    if (error || !data) {
+      if (!/^\d+$/.test(slugOrId)) return null;
+      
+      const { data: idData, error: idError } = await supabase
+        .from('topics')
         .select(`
           *,
-          author:profiles(*)
+          profiles (username, avatar_url),
+          categories (name, slug)
         `)
-        .eq("slug", slug)
-        .single();
-        
-      if (result.data) {
-        return result.data;
-      }
-      
-      console.log(`getTopicBySlug: No topic found with slug "${slug}", trying as ID`);
-      
-      // If no result by slug, try by ID if the slug looks like a number or UUID
-      if (
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug) || 
-        /^\d+$/.test(slug)
-      ) {
-        try {
-          const resultById = await supabase
-            .from("topics")
-            .select(`
-              *,
-              author:profiles(*)
-            `)
-            .eq("id", slug)
-            .single();
-            
-          if (resultById.data) {
-            return resultById.data;
-          } else {
-            console.error("getTopicBySlug: No topic found with ID", slug);
-          }
-        } catch (idError) {
-          console.error("getTopicBySlug: Error fetching by ID:", idError);
-        }
-      }
-      
-      // If we get here, no topic was found
-      console.error(`getTopicBySlug: Topic not found for "${slug}"`);
-      return null;
-    } catch (queryError) {
-      console.error("getTopicBySlug: Query error:", queryError);
-      return null;
+        .eq('id', slugOrId)
+        .single() as QueryResult<Database['Tables']['topics']['Row'] & {
+          profiles: { username: string; avatar_url: string }[];
+          categories: { name: string; slug: string }[];
+        }>;
+
+      if (idError || !idData) return null;
+      return mapDbTopicToTopic(idData);
     }
-  } catch (finalError) {
-    console.error("getTopicBySlug: Final error:", finalError);
+
+    return mapDbTopicToTopic(data);
+  } catch (error) {
+    console.error("Error in getTopicBySlug:", error);
     return null;
   }
+}
+
+function isError<T>(result: { data: T; error: null; } | { data: null; error: any; }): result is { data: null; error: any; } {
+  return result && typeof result === 'object' && 'error' in result && result.error !== null;
 }

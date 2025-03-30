@@ -1,2 +1,15 @@
+@import 'easymde/dist/easymde.min.css';
 
-@import 'simplemde/dist/simplemde.min.css';
+.EasyMDEContainer {
+  width: 100%;
+}
+
+.editor-toolbar {
+  border-radius: 0.5rem 0.5rem 0 0;
+  border: 1px solid hsl(var(--border));
+}
+
+.CodeMirror {
+  border-radius: 0 0 0.5rem 0.5rem !important;
+  border: 1px solid hsl(var(--border)) !important;
+}
