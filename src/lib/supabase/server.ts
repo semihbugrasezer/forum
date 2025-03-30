@@ -18,12 +18,17 @@ export const createClient = cache(async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
+      auth: {
+        flowType: 'pkce',
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        persistSession: true,
+      },
       cookies: {
         async get(name) {
           try {
             const cookieStore = await cookies();
-            const cookie = cookieStore.get(name);
-            return cookie?.value;
+            return cookieStore.get(name)?.value;
           } catch (error) {
             console.error(`Error getting cookie ${name}:`, error);
             return null;
@@ -36,6 +41,10 @@ export const createClient = cache(async () => {
               name,
               value,
               ...options,
+              // Ensure secure cookies in production
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              path: '/',
             });
           } catch (error) {
             console.error(`Error setting cookie ${name}:`, error);
@@ -49,6 +58,10 @@ export const createClient = cache(async () => {
               value: '',
               ...options,
               maxAge: 0,
+              // Ensure secure cookies in production
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              path: '/',
             });
           } catch (error) {
             console.error(`Error removing cookie ${name}:`, error);

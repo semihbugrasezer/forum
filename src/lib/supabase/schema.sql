@@ -1,3 +1,6 @@
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Enable RLS
 alter table auth.users enable row level security;
 
@@ -6,6 +9,17 @@ create table public.profiles (
   id uuid references auth.users on delete cascade not null primary key,
   name text,
   avatar_url text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create categories table
+create table public.categories (
+  id uuid default gen_random_uuid() primary key,
+  name text not null unique,
+  slug text not null unique,
+  description text,
+  topics_count integer default 0 not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -31,11 +45,20 @@ create table public.topics (
 create table public.comments (
   id uuid default gen_random_uuid() primary key,
   content text not null,
-  user_id uuid references public.profiles on delete cascade not null,
+  user_id uuid references auth.users on delete cascade not null,
   topic_id uuid references public.topics on delete cascade not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
   is_solution boolean default false not null
+);
+
+-- Create comment_likes table
+CREATE TABLE IF NOT EXISTS public.comment_likes (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  comment_id UUID REFERENCES public.comments(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  UNIQUE(comment_id, user_id)
 );
 
 -- Create likes table
@@ -47,17 +70,6 @@ create table public.likes (
   unique(user_id, topic_id)
 );
 
--- Create categories table
-create table public.categories (
-  id uuid default gen_random_uuid() primary key,
-  name text not null unique,
-  slug text not null unique,
-  description text,
-  topics_count integer default 0 not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
 -- Add indexes
 create index topics_user_id_idx on public.topics(user_id);
 create index topics_category_idx on public.topics(category);
@@ -67,6 +79,8 @@ create index comments_topic_id_idx on public.comments(topic_id);
 create index comments_user_id_idx on public.comments(user_id);
 create index likes_topic_id_idx on public.likes(topic_id);
 create index likes_user_id_idx on public.likes(user_id);
+CREATE INDEX IF NOT EXISTS comment_likes_comment_id_idx ON public.comment_likes(comment_id);
+CREATE INDEX IF NOT EXISTS comment_likes_user_id_idx ON public.comment_likes(user_id);
 
 -- Enable RLS policies
 alter table public.profiles enable row level security;
@@ -74,6 +88,7 @@ alter table public.topics enable row level security;
 alter table public.comments enable row level security;
 alter table public.likes enable row level security;
 alter table public.categories enable row level security;
+ALTER TABLE public.comment_likes ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies for profiles
 create policy "Public profiles are viewable by everyone"
@@ -179,4 +194,4 @@ $$ language plpgsql security definer;
 -- Trigger for topic counts
 create trigger update_category_topic_count
   after insert or delete on public.topics
-  for each row execute procedure public.update_topic_counts(); 
+  for each row execute procedure public.update_topic_counts();

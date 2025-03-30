@@ -1,6 +1,7 @@
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { createSupabaseCookie, parseSupabaseCookie } from '@/lib/utils/cookies'
 
 // Rate limiting configuration - use environment variables with fallbacks
 const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW || '60000', 10); // 1 minute default
@@ -123,88 +124,122 @@ function addCacheHeaders(res: NextResponse, cacheable: boolean = false) {
 }
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next()
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
   
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          flowType: 'pkce',
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+          persistSession: true,
         },
-        set(name: string, value: string, options: any) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set(name, value, options)
+        cookies: {
+          get(name: string) {
+            const cookie = request.cookies.get(name)?.value
+            if (!cookie) return undefined
+            // Base64 ile kodlanmış değeri çöz
+            if (cookie.startsWith('base64-')) {
+              try {
+                return JSON.parse(Buffer.from(cookie.slice(7), 'base64').toString('utf-8'));
+              } catch (error) {
+                console.error('Cookie parse hatası (middleware):', error);
+                return undefined;
+              }
+            }
+            return cookie
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            // JSON string'e çevir, sonra base64 kodla
+            let cookieValue;
+            try {
+              const sessionValue = typeof value === 'string' ? value : JSON.stringify(value);
+              cookieValue = 'base64-' + Buffer.from(sessionValue).toString('base64');
+            } catch (error) {
+              console.error('Cookie encoding hatası:', error);
+              cookieValue = value; // Fallback to original value
+            }
+            
+            response.cookies.set({
+              name,
+              value: cookieValue,
+              ...options,
+            })
+          },
+          remove(name: string, options: CookieOptions) {
+            response.cookies.set({
+              name,
+              value: '',
+              ...options,
+              maxAge: 0,
+            })
+          },
         },
-        remove(name: string, options: any) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set(name, '', options)
-        },
-      },
+      }
+    )
+
+    // Get user session using getSession() instead of getUser()
+    const sessionCookie = request.cookies.get('sb-session')?.value;
+    const session = parseSupabaseCookie(sessionCookie);
+
+    // Admin role verification
+    const isAdmin = () => {
+      if (!session) return false
+      
+      // Development environment check
+      if (process.env.NODE_ENV === 'development' && 
+          process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true' &&
+          process.env.DEVELOPMENT_ADMIN_EMAIL === session.user.user_metadata.email) {
+        return true
+      }
+      
+      return session.user.user_metadata.email?.endsWith('@thy.com') || 
+             session.user.user_metadata.app_metadata?.roles?.includes('admin') || 
+             false
     }
-  )
 
-  // Get user session
-  const { data: { user } } = await supabase.auth.getUser()
-
-  // Admin role verification
-  const isAdmin = () => {
-    if (!user) return false
-    
-    // Development environment check
-    if (process.env.NODE_ENV === 'development' && 
-        process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true' &&
-        process.env.DEVELOPMENT_ADMIN_EMAIL === user.email) {
-      return true
+    // Protected route access control
+    if (protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+      if (!session?.user) {
+        const redirectUrl = new URL('/auth/login', request.url)
+        redirectUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
+        return NextResponse.redirect(redirectUrl)
+      }
     }
-    
-    return user.email?.endsWith('@thy.com') || 
-           user.app_metadata?.roles?.includes('admin') || 
-           false
-  }
 
-  // Protected route access control
-  if (protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
-    if (!user) {
-      const redirectUrl = new URL('/auth/login', request.url)
-      redirectUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
-      return NextResponse.redirect(redirectUrl)
+    // Admin route access control
+    if (adminRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+      if (!session || !isAdmin()) {
+        console.warn(`Unauthorized admin access attempt: ${request.nextUrl.pathname} by ${session?.user.user_metadata.email ?? 'unknown'}`)
+        return NextResponse.redirect(new URL('/', request.url))
+      }
     }
-  }
 
-  // Admin route access control
-  if (adminRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
-    if (!user || !isAdmin()) {
-      console.warn(`Unauthorized admin access attempt: ${request.nextUrl.pathname} by ${user?.email ?? 'unknown'}`)
+    // Authenticated user redirection from auth pages
+    if (session && (request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/register'))) {
       return NextResponse.redirect(new URL('/', request.url))
     }
+
+    // Add caching headers for public, cacheable routes
+    const isCacheable = 
+      (request.nextUrl.pathname === '/' || 
+       request.nextUrl.pathname.startsWith('/forum') || 
+       request.nextUrl.pathname.startsWith('/search')) && 
+      request.method === 'GET' && 
+      !session; // Only cache for anonymous users
+
+    return addCacheHeaders(response, isCacheable);
+  } catch (error) {
+    console.error('Error in middleware:', error)
+    return errorResponse(500, 'Internal Server Error')
   }
-
-  // Authenticated user redirection from auth pages
-  if (user && (request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/register'))) {
-    return NextResponse.redirect(new URL('/', request.url))
-  }
-
-  // Add caching headers for public, cacheable routes
-  const isCacheable = 
-    (request.nextUrl.pathname === '/' || 
-     request.nextUrl.pathname.startsWith('/forum') || 
-     request.nextUrl.pathname.startsWith('/search')) && 
-    request.method === 'GET' && 
-    !user; // Only cache for anonymous users
-
-  return addCacheHeaders(response, isCacheable);
 }
 
 // Middleware matcher configuration

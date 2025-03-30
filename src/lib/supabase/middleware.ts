@@ -13,6 +13,12 @@ export async function updateSession(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        auth: {
+          flowType: 'pkce',
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+          persistSession: true,
+        },
         cookies: {
           get(name: string) {
             try {
@@ -29,6 +35,10 @@ export async function updateSession(request: NextRequest) {
                 name,
                 value,
                 ...options,
+                // Ensure secure cookies in production
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
               })
               
               // Set cookie in the response to be sent to the client
@@ -42,6 +52,10 @@ export async function updateSession(request: NextRequest) {
                 name,
                 value,
                 ...options,
+                // Ensure secure cookies in production
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
               })
             } catch (error) {
               console.error(`Error setting cookie ${name} in middleware:`, error)
@@ -64,6 +78,10 @@ export async function updateSession(request: NextRequest) {
                 value: '',
                 ...options,
                 maxAge: 0,
+                // Ensure secure cookies in production
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
               })
             } catch (error) {
               console.error(`Error removing cookie ${name} in middleware:`, error)
@@ -73,8 +91,11 @@ export async function updateSession(request: NextRequest) {
       }
     )
 
-    // Refresh the session - makes sure we have the most up-to-date session
-    await supabase.auth.getUser()
+    // Refresh the session using getUser() instead of getSession()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) {
+      console.error('Error refreshing session:', userError)
+    }
   } catch (error) {
     console.error('Error in auth middleware:', error)
   }
