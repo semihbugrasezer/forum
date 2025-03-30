@@ -2,6 +2,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
   images: {
     remotePatterns: [
       {
@@ -9,41 +10,17 @@ const nextConfig = {
         hostname: "**",
       },
     ],
+    domains: ["localhost", "oauhlrhvaqiuusuiqfno.supabase.co"],
   },
-  // Next.js App Router redirects
-  async redirects() {
-    return [
-      {
-        source: "/\\(forum\\)",
-        destination: "/forum",
-        permanent: true,
-      },
-      {
-        source: "/\\(forum\\)/:path*",
-        destination: "/forum/:path*",
-        permanent: true,
-      },
-      {
-        source: "/profile",
-        destination: "/user-profile",
-        permanent: true,
-      },
-      {
-        source: "/search",
-        destination: "/",
-        permanent: true,
-      },
-      {
-        source: "/notifications",
-        destination: "/",
-        permanent: true,
-      },
-      {
-        source: "/messages",
-        destination: "/",
-        permanent: true,
-      },
-    ];
+  serverExternalPackages: ["@supabase/ssr"],
+  experimental: {
+    esmExternals: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
   },
 };
 

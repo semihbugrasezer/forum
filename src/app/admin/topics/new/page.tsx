@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { createSlug } from "@/lib/utils";
 import dynamic from "next/dynamic";
-import "easymde/dist/easymde.min.css";
+import "simplemde/dist/simplemde.min.css";
 
 // SimpleMDE markdown editörünü dinamik olarak yükle
 import type SimpleMDEEditor from 'react-simplemde-editor';

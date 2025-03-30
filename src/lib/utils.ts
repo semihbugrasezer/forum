@@ -53,16 +53,16 @@ export function formatDate(date: Date): string {
 }
 
 /**
- * Sayıları formatlı göstermek için
- * @param num Formatlanacak sayı
- * @returns Formatlanmış sayı
+ * Format a number with thousand separators
  */
 export function formatNumber(num: number): string {
+  if (num === null || num === undefined) return '0';
+  
   if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + "M";
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
   }
   if (num >= 1000) {
-    return (num / 1000).toFixed(1) + "K";
+    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   }
   return num.toString();
 }
@@ -74,9 +74,9 @@ export function formatNumber(num: number): string {
  * @returns Kısaltılmış metin
  */
 export function truncateText(text: string, maxLength: number): string {
-  if (!text) return "";
+  if (!text) return '';
   if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + "...";
+  return text.slice(0, maxLength) + '...';
 }
 
 /**
@@ -100,40 +100,29 @@ export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>?/gm, "");
 }
 
-export function formatRelativeTime(date: Date | string): string {
-  if (!date) return "";
-  const d = new Date(date);
+/**
+ * Convert a date to a relative time string (e.g., "5 minutes ago")
+ */
+export function getTimeAgo(date: Date) {
   const now = new Date();
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
   
-  const minute = 60;
-  const hour = minute * 60;
-  const day = hour * 24;
-  const week = day * 7;
-  const month = day * 30;
-  const year = day * 365;
+  if (diffInSeconds < 60) return 'şimdi';
   
-  if (diff < minute) {
-    return "az önce";
-  } else if (diff < hour) {
-    const minutes = Math.floor(diff / minute);
-    return `${minutes} dakika önce`;
-  } else if (diff < day) {
-    const hours = Math.floor(diff / hour);
-    return `${hours} saat önce`;
-  } else if (diff < week) {
-    const days = Math.floor(diff / day);
-    return `${days} gün önce`;
-  } else if (diff < month) {
-    const weeks = Math.floor(diff / week);
-    return `${weeks} hafta önce`;
-  } else if (diff < year) {
-    const months = Math.floor(diff / month);
-    return `${months} ay önce`;
-  } else {
-    const years = Math.floor(diff / year);
-    return `${years} yıl önce`;
-  }
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes} dakika önce`;
+  
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours} saat önce`;
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 30) return `${diffInDays} gün önce`;
+  
+  const diffInMonths = Math.floor(diffInDays / 30);
+  if (diffInMonths < 12) return `${diffInMonths} ay önce`;
+  
+  const diffInYears = Math.floor(diffInMonths / 12);
+  return `${diffInYears} yıl önce`;
 }
 
 export function truncate(text: string, length: number): string {
@@ -150,13 +139,21 @@ export function generateMetadata(title: string, description?: string): Metadata 
   };
 }
 
-export const createSlug = (str: string) => {
-  return str
+/**
+ * Creates a slug from a string
+ */
+export function createSlug(text: string): string {
+  return text
+    .toString()
     .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-};
+    .trim()
+    .replace(/\s+/g, '-')           // Replace spaces with -
+    .replace(/&/g, '-and-')         // Replace & with 'and'
+    .replace(/[^\w\-]+/g, '')       // Remove all non-word characters
+    .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+    .replace(/^-+/, '')             // Trim - from start of text
+    .replace(/-+$/, '');            // Trim - from end of text
+}
 
 export const formatExtendedDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -168,3 +165,66 @@ export const formatExtendedDate = (dateString: string) => {
     minute: '2-digit'
   }).format(date);
 };
+
+/**
+ * Generate a random alphanumeric string of specified length
+ */
+export function generateRandomString(length: number): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+/**
+ * Generate a slug from a string
+ */
+export function generateSlug(text: string): string {
+  return text
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]+/g, '')
+    .replace(/--+/g, '-')
+    .substring(0, 100);
+}
+
+/**
+ * Safely access nested object properties
+ */
+export function get(obj: any, path: string, defaultValue = undefined): any {
+  const travel = (regexp: RegExp) =>
+    String.prototype.split
+      .call(path, regexp)
+      .filter(Boolean)
+      .reduce((res, key) => (res !== null && res !== undefined ? res[key] : res), obj);
+  const result = travel(/[,[\]]+?/) || travel(/[,[\].]+?/);
+  return result === undefined || result === obj ? defaultValue : result;
+}
+
+/**
+ * Debounce function to limit how often a function can be called
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T, 
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+  
+  return function executedFunction(...args: Parameters<T>) {
+    const later = () => {
+      timeout = null;
+      func(...args);
+    };
+    
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    timeout = setTimeout(later, wait);
+  };
+}

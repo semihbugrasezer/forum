@@ -1,9 +1,9 @@
-import { createServerClient as createServerSupabaseClient } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Database } from "@/types/supabase";
 
 export const createServerClient = (cookieStore: ReturnType<typeof cookies>) => {
-  return createServerSupabaseClient<Database>({
+  return createServerClient<Database>({
     cookies: {
       async get(name: string) {
         return cookieStore.get(name)?.value;

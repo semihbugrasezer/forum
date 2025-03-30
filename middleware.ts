@@ -1,4 +1,4 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
@@ -132,23 +132,65 @@ export async function middleware(req: NextRequest) {
       return errorResponse(429, 'Too Many Requests');
     }
 
-    const res = NextResponse.next();
-    const supabase = createMiddlewareClient({ req, res });
+    // Create a response to modify
+    let response = NextResponse.next();
+    
+    // Create Supabase client - Updated for Next.js 15
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) {
+            return req.cookies.get(name)?.value
+          },
+          set(name, value, options) {
+            req.cookies.set({
+              name,
+              value,
+              ...options,
+            })
+            response = NextResponse.next({
+              request: {
+                headers: req.headers,
+              },
+            })
+            response.cookies.set({
+              name,
+              value,
+              ...options,
+            })
+          },
+          remove(name, options) {
+            req.cookies.set({
+              name,
+              value: '',
+              ...options,
+              maxAge: 0,
+            })
+            response = NextResponse.next({
+              request: {
+                headers: req.headers,
+              },
+            })
+            response.cookies.set({
+              name,
+              value: '',
+              ...options,
+              maxAge: 0,
+            })
+          },
+        },
+      }
+    );
     
     // Add security headers
     Object.entries(securityHeaders).forEach(([key, value]) => {
-      res.headers.set(key, value);
+      response.headers.set(key, value);
     });
     
-    // Auth state check with caching
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError) {
-      console.error('Session error:', sessionError);
-      return errorResponse(401, 'Authentication failed');
-    }
-
-    const user = session?.user;
+    // IMPORTANT: Avoid logic between createServerClient and getUser
+    const { data: { user } } = await supabase.auth.getUser();
     
     // SEO-friendly URL structure
     if (path !== path.toLowerCase()) {
@@ -202,8 +244,8 @@ export async function middleware(req: NextRequest) {
     
     // Add user context to headers for logging
     if (user) {
-      res.headers.set('X-User-Id', user.id);
-      res.headers.set('X-User-Role', isAdmin() ? 'admin' : 'user');
+      response.headers.set('X-User-Id', user.id);
+      response.headers.set('X-User-Role', isAdmin() ? 'admin' : 'user');
     }
     
     // Add caching headers for public, cacheable routes
@@ -214,7 +256,7 @@ export async function middleware(req: NextRequest) {
       req.method === 'GET' && 
       !user; // Only cache for anonymous users
     
-    return addCacheHeaders(res, isCacheable);
+    return addCacheHeaders(response, isCacheable);
   } catch (error) {
     console.error('Middleware error:', error);
     return errorResponse(500, 'Internal Server Error');

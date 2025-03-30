@@ -2,34 +2,23 @@
 
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { createClient as serverCreateClient } from '@/lib/supabase/server';
 
-export async function createServerSupabaseClient() {
-  const cookieStore = await cookies();
-  
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: any) {
-          cookieStore.set(name, value, options);
-        },
-        remove(name: string, options: any) {
-          cookieStore.set(name, '', options);
-        },
-      },
-    }
-  );
+// Create a Supabase client for this file
+export async function createClient() {
+  try {
+    return await serverCreateClient();
+  } catch (error) {
+    console.error("Error creating Supabase client:", error);
+    throw error;
+  }
 }
 
 import { getUser } from './auth';
 
 // Tüm kategorileri alma
 export async function getCategories() {
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('categories')
@@ -46,7 +35,7 @@ export async function getCategories() {
 
 // Kategori detayını alma
 export async function getCategoryBySlug(slug: string) {
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('categories')
@@ -94,7 +83,7 @@ export async function createCategory(categoryData: {
     };
   }
   
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('categories')
@@ -137,7 +126,7 @@ export async function updateCategory(categoryId: string, categoryData: {
     };
   }
   
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('categories')
@@ -178,7 +167,7 @@ export async function deleteCategory(categoryId: string) {
     };
   }
   
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
   
   const { error } = await supabase
     .from('categories')

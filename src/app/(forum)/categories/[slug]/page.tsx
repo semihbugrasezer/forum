@@ -1,17 +1,24 @@
 import { notFound } from "next/navigation";
 import { CategoryContent } from "@/components/category/CategoryContent";
 
-export default function CategoryPage({
-  params,
-}: {
-  params: { slug: string }
-}) {
+interface PageProps {
+  params: Promise<{
+    slug: string;
+  }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function CategoryPage({ params }: PageProps) {
+  // Await params object first
+  const resolvedParams = await params;
+  const slug = resolvedParams.slug;
+  
   const category = {
-    title: params.slug.replace(/-/g, ' '),
-    id: params.slug,
-    slug: params.slug,
+    title: slug.replace(/-/g, ' '),
+    id: slug,
+    slug: slug,
     count: 0
-  }
+  };
 
   if(!category) return notFound();
 

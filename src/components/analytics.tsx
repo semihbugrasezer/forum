@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname, useSearchParams } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, Suspense } from "react"
 import { Analytics as VercelAnalytics } from "@vercel/analytics/react"
 
 declare global {
@@ -10,7 +10,8 @@ declare global {
   }
 }
 
-export function Analytics() {
+// Component to handle search params that needs to be wrapped in Suspense
+function AnalyticsContent() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -24,4 +25,12 @@ export function Analytics() {
   }, [pathname, searchParams])
 
   return <VercelAnalytics />
+}
+
+export function Analytics() {
+  return (
+    <Suspense fallback={null}>
+      <AnalyticsContent />
+    </Suspense>
+  )
 } 

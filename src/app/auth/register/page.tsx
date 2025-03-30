@@ -145,193 +145,168 @@ export default function RegisterPage() {
             </TabsList>
             
             <TabsContent value="email" className="space-y-4">
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="full_name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Ad Soyad</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                              placeholder="Adınız ve soyadınız" 
-                              className="pl-9"
-                              {...field}
-                              aria-label="Ad Soyad"
-                            />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>E-posta</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                              placeholder="E-posta adresiniz" 
-                              type="email" 
-                              className="pl-9"
-                              {...field}
-                              aria-label="E-posta"
-                            />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Şifre</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                              placeholder="Şifreniz" 
-                              type={showPassword ? "text" : "password"} 
-                              className="pl-9"
-                              {...field}
-                              aria-label="Şifre"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute right-0 top-0 h-9 w-9"
-                              onClick={() => setShowPassword(!showPassword)}
-                              aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
-                            >
-                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              <span className="sr-only">
-                                {showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
-                              </span>
-                            </Button>
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="confirm_password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Şifre (Tekrar)</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                              placeholder="Şifrenizi tekrar girin" 
-                              type={showConfirmPassword ? "text" : "password"} 
-                              className="pl-9"
-                              {...field}
-                              aria-label="Şifre Tekrar"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute right-0 top-0 h-9 w-9"
-                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                              aria-label={showConfirmPassword ? "Şifreyi gizle" : "Şifreyi göster"}
-                            >
-                              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              <span className="sr-only">
-                                {showConfirmPassword ? "Şifreyi gizle" : "Şifreyi göster"}
-                              </span>
-                            </Button>
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="terms"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            aria-label="Kullanım koşullarını kabul et"
+              <Form {...form} onSubmit={onSubmit}>
+                <FormField
+                  control={form.control}
+                  name="full_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ad Soyad</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="Adınız ve soyadınız" 
+                            className="pl-9"
+                            {...field}
+                            aria-label="Ad Soyad"
                           />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel className="text-sm font-normal">
-                            <Link href="/terms" className="underline">Kullanım Koşulları</Link> ve{" "}
-                            <Link href="/privacy" className="underline">Gizlilik Politikası</Link>'nı 
-                            kabul ediyorum
-                          </FormLabel>
-                          <FormMessage />
                         </div>
-                      </FormItem>
-                    )}
-                  />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>E-posta</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="E-posta adresiniz" 
+                            type="email" 
+                            className="pl-9"
+                            {...field}
+                            aria-label="E-posta"
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Şifre</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="Şifreniz" 
+                            type={showPassword ? "text" : "password"} 
+                            className="pl-9"
+                            {...field}
+                            aria-label="Şifre"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-9 w-9"
+                            onClick={() => setShowPassword(!showPassword)}
+                            aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                          >
+                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            <span className="sr-only">
+                              {showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                            </span>
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="confirm_password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Şifre (Tekrar)</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="Şifrenizi tekrar girin" 
+                            type={showConfirmPassword ? "text" : "password"} 
+                            className="pl-9"
+                            {...field}
+                            aria-label="Şifre Tekrar"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-9 w-9"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            aria-label={showConfirmPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                          >
+                            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            <span className="sr-only">
+                              {showConfirmPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                            </span>
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Kayıt Olunuyor..." : "Kayıt Ol"}
-                  </Button>
-                </form>
+                <FormField
+                  control={form.control}
+                  name="terms"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>
+                          Kullanım koşullarını kabul ediyorum
+                        </FormLabel>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Kayıt olunuyor..." : "Kayıt Ol"}
+                </Button>
               </Form>
             </TabsContent>
-            
+
             <TabsContent value="social" className="space-y-4">
-              <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px">
-                  <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
-                  <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
-                  <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
-                  <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
-                </svg>
-                Google ile devam et
-              </Button>
-              
-              <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 14222 14222">
-                  <circle cx="7111" cy="7112" r="7111" fill="#1977f3"/>
-                  <path d="M9879 7112l-2768 0 0 -2567 0c0 0 310 -1560 1699 -1560 1620 0 1384 1626 1384 1626l2393 0c-270 -3963 -3919 -3634 -3919 -3634 -4947 0 -4830 5130 -4830 5130l0 1005 -1358 0 0 2493 1358 0 0 5777 2271 0 0 -5777 2768 0 0 0z" fill="#fff"/>
-                </svg>
-                Facebook ile devam et
-              </Button>
-              
-              <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-                <Github className="h-5 w-5" />
-                GitHub ile devam et
-              </Button>
-              
-              <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-                <Twitter className="h-5 w-5" />
-                Twitter ile devam et
-              </Button>
+              <div className="space-y-4">
+                <Button variant="outline" className="w-full" onClick={() => {}}>
+                  <Github className="mr-2 h-4 w-4" />
+                  Github ile Kayıt Ol
+                </Button>
+                <Button variant="outline" className="w-full" onClick={() => {}}>
+                  <Twitter className="mr-2 h-4 w-4" />
+                  Twitter ile Kayıt Ol
+                </Button>
+              </div>
             </TabsContent>
           </Tabs>
-          
-          <Separator />
-          
-          <div className="text-center text-sm">
-            Zaten bir hesabınız var mı?{" "}
-            <Link href="/auth/login" className="font-semibold text-primary hover:underline">
-              Giriş Yap
+
+          <div className="mt-4 text-center text-sm">
+            Zaten hesabınız var mı?{" "}
+            <Link href="/auth/login" className="text-primary hover:underline">
+              Giriş yapın
             </Link>
           </div>
         </div>

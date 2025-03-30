@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -14,11 +14,32 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 
-export default function LoginPage() {
-  const router = useRouter();
+// Component to handle search params that needs to be wrapped in Suspense
+function SearchParamsHandler() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/';
   const tab = searchParams.get('tab') || 'login';
+  
+  return { searchParams, redirectTo, tab };
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="container flex items-center justify-center min-h-[calc(100vh-8rem)] py-10">
+        <div className="w-full max-w-md mx-auto">
+          <div className="h-10 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mx-auto"></div>
+        </div>
+      </div>
+    }>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
+  const router = useRouter();
+  const { searchParams, redirectTo, tab } = SearchParamsHandler();
   
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -214,7 +235,7 @@ export default function LoginPage() {
   return (
     <div className="container flex items-center justify-center min-h-[calc(100vh-8rem)] py-10">
       <div className="w-full max-w-md mx-auto">
-        <Tabs defaultValue={tab || "login"} className="w-full">
+        <Tabs defaultValue={tab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-4">
             <TabsTrigger value="login">Giriş Yap</TabsTrigger>
             <TabsTrigger value="register">Kayıt Ol</TabsTrigger>

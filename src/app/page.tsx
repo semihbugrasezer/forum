@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { User } from '@supabase/supabase-js';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -26,8 +26,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-export default function HomePage() {
-  const router = useRouter();
+// Component to handle search params that needs to be wrapped in Suspense
+function SearchParamsHandler() {
   const searchParams = useSearchParams();
   const supabase = createClientComponentClient();
   const [user, setUser] = useState<User | null>(null);
@@ -48,6 +48,24 @@ export default function HomePage() {
     }
   }, [supabase, searchParams]);
 
+  return { user, loading };
+}
+
+export default function HomePage() {
+  const router = useRouter();
+
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">
+      <div className="h-10 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+    </div>}>
+      <HomePageContent />
+    </Suspense>
+  );
+}
+
+function HomePageContent() {
+  const { user, loading } = SearchParamsHandler();
+  
   // Forum özellikleri
   const features = [
     {

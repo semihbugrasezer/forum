@@ -1,6 +1,6 @@
 'use server';
 import { getUser } from './auth';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
 // Kullanıcı profilini alma
 export async function getUserProfile() {
@@ -10,7 +10,7 @@ export async function getUserProfile() {
     return null;
   }
   
-  const supabase = createServerSupabaseClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('profiles')
@@ -41,7 +41,7 @@ export async function updateUserProfile(profileData: {
     };
   }
   
-  const supabase = createServerSupabaseClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('profiles')
@@ -76,7 +76,7 @@ export async function updateUserAvatar(avatarFile: File) {
     };
   }
   
-  const supabase = createServerSupabaseClient();
+  const supabase = await createClient();
   
   // Dosya adını oluştur
   const fileExt = avatarFile.name.split('.').pop();
@@ -125,7 +125,7 @@ export async function updateUserAvatar(avatarFile: File) {
 
 // Kullanıcı ID'sine göre profil alma
 export async function getUserProfileById(userId: string) {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('profiles')
@@ -139,14 +139,4 @@ export async function getUserProfileById(userId: string) {
   }
   
   return data;
-} 
-function createServerSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Supabase URL veya anahtar bulunamadı.');
-  }
-
-  return createClient(supabaseUrl, supabaseKey);
 }

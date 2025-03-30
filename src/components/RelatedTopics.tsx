@@ -27,100 +27,6 @@ interface Topic {
   last_activity_at: string;
 }
 
-// Mock data for related topics
-const mockTopics: Topic[] = [
-  {
-    id: "1",
-    title: "Miles&Smiles ile yurtdışı uçuşlarda ekstra mil kazanma",
-    content: "THY Miles&Smiles programıyla yurtdışı uçuşlarda ekstra mil kazanmak için ipuçları ve stratejiler. Business class yükseltmelerini nasıl daha uygun şekilde alabilirim?",
-    user_id: "user-1",
-    category: "Miles&Smiles",
-    created_at: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
-    updated_at: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
-    likes_count: 45,
-    comments_count: 12,
-    views: 320,
-    is_pinned: false,
-    is_locked: false,
-    last_activity_at: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString()
-  },
-  {
-    id: "2",
-    title: "İstanbul - New York uçuşu için en iyi koltuk önerileri",
-    content: "THY'nin İstanbul-New York rotasında A330-300 uçağında en rahat koltuklar ve kaçınılması gereken yerler hakkında bilgiler ve deneyimlerim.",
-    user_id: "user-2",
-    category: "Uçuş Deneyimi",
-    created_at: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(),
-    updated_at: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(),
-    likes_count: 32,
-    comments_count: 24,
-    views: 528,
-    is_pinned: false,
-    is_locked: false,
-    last_activity_at: new Date(new Date().setDate(new Date().getDate() - 3)).toISOString()
-  },
-  {
-    id: "3",
-    title: "THY lounge İstanbul deneyimim ve öneriler",
-    content: "İstanbul Havalimanı'ndaki Turkish Airlines Business Lounge'da sunulan hizmetler, yemekler ve dinlenme alanları hakkında detaylı bir inceleme ve ipuçları.",
-    user_id: "user-3",
-    category: "Lounge",
-    created_at: new Date(new Date().setDate(new Date().getDate() - 10)).toISOString(),
-    updated_at: new Date(new Date().setDate(new Date().getDate() - 10)).toISOString(),
-    likes_count: 87,
-    comments_count: 35,
-    views: 1120,
-    is_pinned: true,
-    is_locked: false,
-    last_activity_at: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString()
-  },
-  {
-    id: "4",
-    title: "THY'nin yeni ekonomi plus sınıfı değer mi?",
-    content: "Türk Hava Yolları'nın uzun mesafeli uçuşlarda sunduğu yeni ekonomi plus sınıfının standart ekonomiye kıyasla avantajları ve dezavantajları nelerdir?",
-    user_id: "user-4",
-    category: "Uçuş Sınıfları",
-    created_at: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString(),
-    updated_at: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString(),
-    likes_count: 54,
-    comments_count: 28,
-    views: 890,
-    is_pinned: false,
-    is_locked: false,
-    last_activity_at: new Date(new Date().setDate(new Date().getDate() - 4)).toISOString()
-  },
-  {
-    id: "5",
-    title: "THY el bagajı politikası - 2024 güncellemeleri",
-    content: "Türk Hava Yolları'nın güncel el bagajı kuralları, ağırlık ve boyut sınırlamalarıyla birlikte fazla bagaj ücretlerinden kaçınma yöntemleri hakkında bilgiler.",
-    user_id: "user-5",
-    category: "Bagaj",
-    created_at: new Date(new Date().setDate(new Date().getDate() - 3)).toISOString(),
-    updated_at: new Date(new Date().setDate(new Date().getDate() - 3)).toISOString(),
-    likes_count: 62,
-    comments_count: 17,
-    views: 780,
-    is_pinned: false,
-    is_locked: false,
-    last_activity_at: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString()
-  },
-  {
-    id: "6",
-    title: "THY kabin ekibi memnuniyeti anketi sonuçları",
-    content: "Türk Hava Yolları kabin ekibi memnuniyeti anketi sonuçları ve 2024 yılında yapılacak iyileştirmeler hakkında detaylı bir rapor.",
-    user_id: "user-6",
-    category: "Hizmet Kalitesi",
-    created_at: new Date(new Date().setDate(new Date().getDate() - 15)).toISOString(),
-    updated_at: new Date(new Date().setDate(new Date().getDate() - 15)).toISOString(),
-    likes_count: 42,
-    comments_count: 19,
-    views: 630,
-    is_pinned: false,
-    is_locked: true,
-    last_activity_at: new Date(new Date().setDate(new Date().getDate() - 8)).toISOString()
-  }
-];
-
 interface RelatedTopicsProps {
   currentTopicId: string;
   categoryId: string;
@@ -190,29 +96,12 @@ export default function RelatedTopics({
 }: RelatedTopicsProps) {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [useMockData, setUseMockData] = useState(false);
   const supabase = createClient();
   
   useEffect(() => {
     const fetchRelatedTopics = async () => {
       try {
         setIsLoading(true);
-        
-        // Use mock data if requested or when in development without connection
-        if (useMockData || process.env.NODE_ENV === 'development') {
-          console.log("Using mock data for related topics");
-          // Filter mock data to exclude current topic and respect limit
-          const filteredMockTopics = mockTopics
-            .filter(topic => topic.id !== currentTopicId)
-            .slice(0, limit);
-          
-          // Simulate network delay for realistic behavior
-          setTimeout(() => {
-            setTopics(filteredMockTopics);
-            setIsLoading(false);
-          }, 500);
-          return;
-        }
         
         if (!tags || tags.length === 0) {
           // If no tags provided, fetch random topics instead
@@ -228,12 +117,7 @@ export default function RelatedTopics({
             setTopics(randomTopics);
           } else if (randomError) {
             console.error("Error fetching random topics:", randomError);
-            // Fallback to mock data on error
-            setUseMockData(true);
-            const filteredMockTopics = mockTopics
-              .filter(topic => topic.id !== currentTopicId)
-              .slice(0, limit);
-            setTopics(filteredMockTopics);
+            setTopics([]);
           }
           setIsLoading(false);
           return;
@@ -269,34 +153,19 @@ export default function RelatedTopics({
             setTopics(recentTopics);
           } else {
             console.error("Error fetching recent topics or no topics found:", recentError);
-            // Fallback to mock data on error or no results
-            setUseMockData(true);
-            const filteredMockTopics = mockTopics
-              .filter(topic => topic.id !== currentTopicId)
-              .slice(0, limit);
-            setTopics(filteredMockTopics);
+            setTopics([]);
           }
         }
       } catch (error) {
         console.error('Error fetching related topics:', error);
-        // Fallback to mock data on any error
-        setUseMockData(true);
-        const filteredMockTopics = mockTopics
-          .filter(topic => topic.id !== currentTopicId)
-          .slice(0, limit);
-        setTopics(filteredMockTopics);
+        setTopics([]);
       } finally {
         setIsLoading(false);
       }
     };
     
     fetchRelatedTopics();
-  }, [currentTopicId, categoryId, tags, limit, supabase, useMockData]);
-  
-  // Force using mock data for testing purposes (can be controlled via a button in development)
-  const toggleMockData = () => {
-    setUseMockData(!useMockData);
-  };
+  }, [currentTopicId, categoryId, tags, limit, supabase]);
   
   if (isLoading) {
     return (
@@ -351,17 +220,6 @@ export default function RelatedTopics({
             İlgili Konular
           </h2>
         </div>
-        
-        {/* Development only toggle for mock data */}
-        {process.env.NODE_ENV === 'development' && (
-          <button
-            onClick={toggleMockData}
-            className="text-xs px-2 py-1 rounded-md bg-muted/50 hover:bg-primary/10 transition-colors duration-200 border border-border/40 text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-            aria-label={useMockData ? "Gerçek veri kullan" : "Mock veri kullan"}
-          >
-            {useMockData ? "Gerçek veri" : "Mock veri"}
-          </button>
-        )}
       </div>
       
       <div className="grid grid-cols-1 gap-3" role="list">
@@ -375,7 +233,7 @@ export default function RelatedTopics({
           >
             <meta itemProp="position" content={`${index + 1}`} />
             <Link 
-              href={`/topics/${topic.id}`} 
+              href={`/forum/topics/${topic.id}`} 
               className="block h-full group"
               title={topic.title}
               itemProp="url"

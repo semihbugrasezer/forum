@@ -1,8 +1,9 @@
 import "./globals.css";
+import '@/styles/easymde.css'
 import type { Metadata } from 'next'
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/toaster";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 
@@ -45,7 +46,7 @@ export default function RootLayout({
             <main className="flex-1">{children}</main>
             <Footer />
           </div>
-          <Toaster position="top-center" closeButton richColors />
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

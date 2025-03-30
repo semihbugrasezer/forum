@@ -4,11 +4,12 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
+  "outputDirectory": ".next",
   "regions": ["fra1"],
   "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@next_public_supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@next_public_supabase_anon_key",
-    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key"
+    "NEXT_PUBLIC_SUPABASE_URL": "https://oauhlrhvaqiuusuiqfno.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hdWhscmh2YXFpdXVzdWlxZm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTg2MTc2MDAsImV4cCI6MjAzNDE5MzYwMH0.NpZdG2DaXL5dCRY4m-5Sy31m9zDRNlf9JXQ_T9sjjDM",
+    "CACHE_DURATION": "1800"
   },
   "headers": [
     {

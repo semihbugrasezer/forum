@@ -7,17 +7,31 @@ import { revalidatePath } from "next/cache";
 import { createServerActionClient } from "@supabase/auth-helpers-nextjs";
 import { type Provider } from "@supabase/supabase-js";
 
-export async function signUp(email: string, password: string, name: string) {
+export async function signUp(emailOrFormData: string | FormData, password?: string, name?: string) {
   const cookieStore = await cookies();
   const supabase = createServerClient(cookieStore);
 
+  let email: string;
+  let pass: string;
+  let displayName: string;
+
+  if (emailOrFormData instanceof FormData) {
+    email = emailOrFormData.get("email") as string;
+    pass = emailOrFormData.get("password") as string;
+    displayName = emailOrFormData.get("name") as string;
+  } else {
+    email = emailOrFormData;
+    pass = password!;
+    displayName = name!;
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
-    password,
+    password: pass,
     options: {
       emailRedirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`,
       data: {
-        name,
+        name: displayName,
       },
     },
   });
@@ -31,7 +45,7 @@ export async function signUp(email: string, password: string, name: string) {
     await supabase.from("profiles").insert({
       id: data.user.id,
       email: email,
-      display_name: name,
+      display_name: displayName,
       role: "user",
     });
   }
@@ -40,13 +54,24 @@ export async function signUp(email: string, password: string, name: string) {
   return { success: true };
 }
 
-export async function signIn(email: string, password: string) {
+export async function signIn(emailOrFormData: string | FormData, password?: string) {
   const cookieStore = await cookies();
   const supabase = createServerClient(cookieStore);
 
+  let email: string;
+  let pass: string;
+
+  if (emailOrFormData instanceof FormData) {
+    email = emailOrFormData.get("email") as string;
+    pass = emailOrFormData.get("password") as string;
+  } else {
+    email = emailOrFormData;
+    pass = password!;
+  }
+
   const { error } = await supabase.auth.signInWithPassword({
     email,
-    password,
+    password: pass,
   });
 
   if (error) {
@@ -85,49 +110,6 @@ export async function requireAuth() {
   }
   
   return session;
-}
-
-export async function signIn(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const cookieStore = await cookies();
-  const supabase = createServerActionClient({ cookies: () => cookieStore });
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  return { success: true };
-}
-
-export async function signUp(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const name = formData.get("name") as string;
-  const cookieStore = await cookies();
-  const supabase = createServerActionClient({ cookies: () => cookieStore });
-
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-      data: {
-        name,
-      },
-    },
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  return { success: true };
 }
 
 export async function signInWithProvider(provider: Provider) {

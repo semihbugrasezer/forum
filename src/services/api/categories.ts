@@ -1,5 +1,5 @@
 import { Category } from "../../types/supabase";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 
 interface CreateCategoryRequest {
   name: string;
@@ -32,7 +32,7 @@ interface ApiResponse<T> {
 export const CategoryAPI = {
   async getCategories(): Promise<ApiResponse<Category[]>> {
     try {
-      const supabase = await createServerSupabaseClient();
+      const supabase = await createClient();
       
       const { data, error } = await supabase
         .from('categories')
@@ -61,7 +61,7 @@ export const CategoryAPI = {
 
   async getCategoryById(id: string): Promise<ApiResponse<Category>> {
     try {
-      const supabase = await createServerSupabaseClient();
+      const supabase = await createClient();
       
       const { data, error } = await supabase
         .from('categories')
@@ -91,7 +91,7 @@ export const CategoryAPI = {
 
   async createCategory(category: CreateCategoryRequest): Promise<ApiResponse<Category>> {
     try {
-      const supabase = await createServerSupabaseClient();
+      const supabase = await createClient();
       
       // Validate required fields
       if (!category.name || !category.slug) {
@@ -131,7 +131,7 @@ export const CategoryAPI = {
 
   async updateCategory(category: UpdateCategoryRequest): Promise<ApiResponse<Category>> {
     try {
-      const supabase = await createServerSupabaseClient();
+      const supabase = await createClient();
       
       const { data, error } = await supabase
         .from('categories')
@@ -162,7 +162,7 @@ export const CategoryAPI = {
 
   async deleteCategory(id: string): Promise<ApiResponse<DeleteCategoryResponse>> {
     try {
-      const supabase = await createServerSupabaseClient();
+      const supabase = await createClient();
       
       const { error } = await supabase
         .from('categories')

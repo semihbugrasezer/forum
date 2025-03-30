@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search, User, MessageSquare, Tag, Filter, ArrowRight, Calendar } from "lucide-react";
@@ -31,11 +31,32 @@ interface SearchResult {
   views?: number;
 }
 
-export default function SearchPage() {
-  const router = useRouter();
+// Component to handle search params that needs to be wrapped in Suspense
+function SearchParamsHandler() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const initialType = searchParams.get("type") || "all";
+  
+  return { initialQuery, initialType, searchParams };
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto py-8 px-4">
+        <div className="flex items-center justify-center h-64">
+          <div className="h-10 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+        </div>
+      </div>
+    }>
+      <SearchPageContent />
+    </Suspense>
+  );
+}
+
+function SearchPageContent() {
+  const router = useRouter();
+  const { initialQuery, initialType, searchParams } = SearchParamsHandler();
   
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [activeTab, setActiveTab] = useState(initialType === "all" ? "topics" : initialType);

@@ -1,8 +1,5 @@
 'use server';
 
-import { cookies } from 'next/headers';
-import { CookieOptions, createServerClient } from '@supabase/ssr';
-import { SupabaseClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 
@@ -10,36 +7,9 @@ type LikeResponse = {
   success?: boolean;
   liked?: boolean;
   message?: string;
+  error?: string;
+  action?: 'liked' | 'unliked';
 };
-
-export async function createServerSupabaseClient() {
-  const cookieStore = await cookies();
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        async get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        async set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set(name, value, options);
-          } catch (error) {
-            console.error('Error setting cookie:', error);
-          }
-        },
-        async remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set(name, '', { ...options, maxAge: 0 });
-          } catch (error) {
-            console.error('Error removing cookie:', error);
-          }
-        },
-      },
-    }
-  );
-}
 
 async function handleLikeOperation(
   table: 'topic_likes' | 'comment_likes',
@@ -49,7 +19,7 @@ async function handleLikeOperation(
   incrementRpc: string,
   decrementRpc: string
 ): Promise<LikeResponse> {
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
   
   // Check if user already liked this item
   const { data: existingLike, error: checkError } = await supabase

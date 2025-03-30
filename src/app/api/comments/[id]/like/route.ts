@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(
   request: NextRequest,
@@ -9,7 +9,7 @@ export async function POST(
     const commentId = params.id;
     
     // Create Supabase client
-    const supabase = await createServerSupabaseClient();
+    const supabase = await createClient();
     
     // Check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();
