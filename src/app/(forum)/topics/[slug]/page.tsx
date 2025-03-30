@@ -33,8 +33,8 @@ export const metadata: Metadata = {
 
 export default async function TopicPage({ params }: PageProps) {
   try {
-    // Get the slug directly from params
-    const { slug } = params;
+    // Await the params properly
+    const slug = await Promise.resolve(params.slug);
     
     if (!slug) {
       console.error("Missing slug parameter");
@@ -112,7 +112,7 @@ export default async function TopicPage({ params }: PageProps) {
           <TopicDetailSection topic={topic} />
           
           {/* Tags Section */}
-          <TagsSection tags={topic.tags} />
+          <TagsSection tags={topic.tags ?? undefined} />
           
           {/* Comments Section */}
           <CommentsSection topicId={topic.id} />
@@ -159,7 +159,7 @@ function TagsSection({ tags }: { tags?: string[] }) {
 async function CommentsSection({ topicId }: { topicId: string }) {
   try {
     // Try to get comments, but don't fail the page if comments fail
-    let comments = [];
+    let comments: any[] = [];
     try {
       comments = await getComments(topicId);
     } catch (error) {
