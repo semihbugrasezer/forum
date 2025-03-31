@@ -24,28 +24,44 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
+
+    /* Mobile notch area color */
+    --notch-color: #2563eb; /* blue-600 */
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    /* Improved dark mode colors with better contrast */
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 91%;
     --primary: 210 40% 98%;
     --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215 20.2% 75%;
+    --accent: 216 34% 17%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
     --ring: 212.7 26.8% 83.9%;
+
+    /* Mobile notch area color - same for dark mode */
+    --notch-color: #2563eb; /* blue-600 */
+
+    /* Custom dark mode improvements */
+    --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+
+    /* Improve button contrast */
+    --button-glow: 0 0 5px rgba(59, 130, 246, 0.5);
+
+    /* Soften harsh edges */
+    --soft-border: 1px solid rgba(255, 255, 255, 0.1);
   }
 }
 
@@ -55,6 +71,34 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Mobile optimizations for notch areas */
+@supports (padding-top: env(safe-area-inset-top)) {
+  :root {
+    --sat: env(safe-area-inset-top);
+    --sar: env(safe-area-inset-right);
+    --sab: env(safe-area-inset-bottom);
+    --sal: env(safe-area-inset-left);
+  }
+
+  /* Apply proper padding for notch areas */
+  body {
+    padding-top: var(--sat);
+    padding-right: var(--sar);
+    padding-bottom: var(--sab);
+    padding-left: var(--sal);
+  }
+
+  /* Change the notch color for PWA mode */
+  @media only screen and (display-mode: standalone) {
+    html {
+      background-color: var(--notch-color);
+    }
+    body {
+      background-color: hsl(var(--background));
+    }
   }
 }
 
@@ -141,4 +185,55 @@
 
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
+}
+
+/* Dark mode text improvements */
+.dark body {
+  font-weight: 350; /* Slightly increased font weight for better readability */
+}
+
+/* Improved card and container styling in dark mode */
+.dark .bg-card,
+.dark .bg-background {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Improve text contrast in dark mode */
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  color: hsl(var(--foreground));
+  text-shadow: var(--text-shadow);
+  letter-spacing: -0.02em;
+}
+
+/* Enhance buttons in dark mode */
+.dark .button-primary,
+.dark button[variant="default"] {
+  box-shadow: var(--button-glow);
+}
+
+/* Improve form field readability */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: hsl(var(--background));
+  border: var(--soft-border);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Improved scrollbars for dark mode */
+.dark::-webkit-scrollbar-track {
+  background-color: hsl(var(--background));
+}
+
+.dark::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.4);
+}
+
+.dark::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.6);
 }

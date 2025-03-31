@@ -1,14 +1,23 @@
-"use client";
+'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
-export default function TopicNotFound() {
+interface ErrorProps {
+  error: Error & { digest?: string };
+  reset: () => void;
+}
+
+export default function TopicError({ error, reset }: ErrorProps) {
+  // Log the error to help with debugging
+  console.error('Topic page error:', error);
+
   return (
     <div className="container mx-auto px-4 py-16 flex flex-col items-center justify-center">
       <div className="max-w-md w-full bg-white shadow-md rounded-lg overflow-hidden p-6 text-center">
         <svg 
-          className="h-16 w-16 text-yellow-500 mx-auto mb-4" 
+          className="h-16 w-16 text-red-500 mx-auto mb-4" 
           xmlns="http://www.w3.org/2000/svg" 
           fill="none" 
           viewBox="0 0 24 24" 
@@ -18,30 +27,25 @@ export default function TopicNotFound() {
             strokeLinecap="round" 
             strokeLinejoin="round" 
             strokeWidth={2} 
-            d="M9.172 16.172a4 4 0 015.656 0M12 14a2 2 0 100-4 2 2 0 000 4z" 
-          />
-          <path 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            strokeWidth={2} 
-            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" 
           />
         </svg>
         
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          Konu Bulunamadı
+          Bir Şeyler Yanlış Gitti
         </h1>
         
         <p className="text-gray-600 mb-6">
-          Aradığınız konu bulunamadı veya silinmiş olabilir. Lütfen ana sayfaya dönerek diğer konulara göz atın.
+          Bu konuyu yüklerken bir hata oluştu. Lütfen tekrar deneyin veya ana sayfaya dönün.
         </p>
         
         <div className="flex flex-col sm:flex-row justify-center gap-4">
-          <Link href="/topics" passHref>
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-              Tüm Konulara Göz At
-            </Button>
-          </Link>
+          <Button 
+            onClick={reset}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Tekrar Dene
+          </Button>
           
           <Link href="/" passHref>
             <Button variant="outline" className="border-blue-600 text-blue-600">
@@ -49,6 +53,12 @@ export default function TopicNotFound() {
             </Button>
           </Link>
         </div>
+        
+        {error.digest && (
+          <p className="mt-6 text-xs text-gray-500">
+            Referans kodu: {error.digest}
+          </p>
+        )}
       </div>
     </div>
   );

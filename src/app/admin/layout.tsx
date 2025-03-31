@@ -120,7 +120,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         // Admin kontrolü - Geliştirme ve prodüksiyon için güvenli
         const isAdmin = () => {
           if (process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true' && process.env.NODE_ENV === 'development') {
-            return true;
+            // If DEVELOPMENT_ADMIN_EMAIL is not set, allow any email in development mode
+            if (!process.env.DEVELOPMENT_ADMIN_EMAIL || 
+                process.env.DEVELOPMENT_ADMIN_EMAIL === user.email) {
+              return true;
+            }
           }
           
           return user.email?.endsWith("@thy.com") || 

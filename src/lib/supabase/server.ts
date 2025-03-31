@@ -5,15 +5,97 @@ import { cookies } from 'next/headers';
 import { Database } from '@/lib/supabase/database.types';
 import { cache } from 'react';
 
+// Tiered caching TTLs for different data types
+const CACHE_TTL = {
+  static: 24 * 60 * 60 * 1000,      // 24 hours for static/reference data
+  public: 60 * 60 * 1000,           // 1 hour for public content
+  personalized: 5 * 60 * 1000,      // 5 minutes for personalized content
+  dynamic: 1 * 60 * 1000,           // 1 minute for very dynamic content
+};
+
+// Enhanced memory cache with size limits
+class LRUCache<T> {
+  private cache = new Map<string, { data: T; timestamp: number; ttl: number }>();
+  private maxSize: number;
+  
+  constructor(maxSize = 1000) {
+    this.maxSize = maxSize;
+  }
+  
+  get(key: string): T | null {
+    const item = this.cache.get(key);
+    if (!item) return null;
+    
+    const now = Date.now();
+    if (now - item.timestamp > item.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    // Move to end (most recently used position)
+    this.cache.delete(key);
+    this.cache.set(key, item);
+    return item.data;
+  }
+  
+  set(key: string, data: T, ttl: number) {
+    // Evict if we're at capacity
+    if (this.cache.size >= this.maxSize) {
+      // Remove oldest entry (first item in map)
+      const oldestKey = this.cache.keys().next().value;
+      this.cache.delete(oldestKey);
+    }
+    
+    this.cache.set(key, { data, timestamp: Date.now(), ttl });
+  }
+  
+  clear(pattern?: RegExp) {
+    if (!pattern) {
+      this.cache.clear();
+      return;
+    }
+    
+    // Clear entries matching pattern
+    for (const key of this.cache.keys()) {
+      if (pattern.test(key)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+  
+  cleanup() {
+    const now = Date.now();
+    for (const [key, item] of this.cache.entries()) {
+      if (now - item.timestamp > item.ttl) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+// Create specialized caches for different data types
+const queryCache = {
+  reference: new LRUCache<any>(500),    // Smaller cache for rarely changing data
+  content: new LRUCache<any>(5000),     // Larger cache for main content
+  user: new LRUCache<any>(10000),       // User-specific cache entries
+};
+
+// Automatically clean expired cache entries
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    Object.values(queryCache).forEach(cache => cache.cleanup());
+  }, 60000); // Clean every minute
+}
+
 /**
- * Creates a Supabase client for server components with proper cookie handling
- * Compatible with Next.js 15
+ * Creates a Supabase client for server components with optimized settings for high traffic
  */
 export const createClient = cache(async () => {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     throw new Error('Missing Supabase environment variables');
   }
   
+  // High performance client configuration
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -23,6 +105,19 @@ export const createClient = cache(async () => {
         autoRefreshToken: false,
         detectSessionInUrl: false,
         persistSession: true,
+      },
+      global: {
+        // Custom fetch implementation with connection reuse
+        fetch: (url, options) => {
+          return fetch(url, {
+            ...options,
+            keepalive: true,
+            headers: {
+              ...options?.headers,
+              'Connection': 'keep-alive',
+            },
+          });
+        },
       },
       cookies: {
         async get(name) {
@@ -72,56 +167,73 @@ export const createClient = cache(async () => {
   );
 });
 
-// Simple in-memory cache for query results
-const queryCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_DURATION = parseInt(process.env.CACHE_DURATION || '3600', 10) * 1000; // Convert to ms
-
-// Helper for cached database operations
+// Helper for cached database operations with tiered caching
 export async function cachedQuery<T>(
-  cacheKey: string, 
-  queryFn: () => Promise<T>, 
-  ttl: number = CACHE_DURATION
-): Promise<T> {
-  const cached = queryCache.get(cacheKey);
-  const now = Date.now();
-  
-  if (cached && (now - cached.timestamp < ttl)) {
-    return cached.data as T;
+  cacheKey: string,
+  queryFn: () => Promise<T>,
+  options: {
+    cacheType: 'reference' | 'content' | 'user',
+    ttl?: number,
+    userId?: string
   }
+): Promise<T> {
+  const { cacheType, ttl = CACHE_TTL.public, userId } = options;
   
-  // Clear expired entries periodically
-  if (now % 60000 < 1000) { // Approximately once a minute
-    for (const [key, value] of Array.from(queryCache.entries())) {
-      if (now - value.timestamp > ttl) {
-        queryCache.delete(key);
-      }
-    }
+  // For user-specific data, include user ID in cache key
+  const finalCacheKey = userId ? `${userId}:${cacheKey}` : cacheKey;
+  
+  // Check cache
+  const cachedResult = queryCache[cacheType].get(finalCacheKey);
+  if (cachedResult !== null) {
+    return cachedResult;
   }
   
   // Execute the query
   const result = await queryFn();
   
   // Cache the result
-  queryCache.set(cacheKey, { data: result, timestamp: now });
+  queryCache[cacheType].set(finalCacheKey, result, ttl);
   
   return result;
 }
 
-// Database operations with caching for read operations
-export async function getTopics(page = 1, limit = 10) {
+// Invalidate cache entries that match a pattern
+export async function invalidateCache(pattern: RegExp, cacheType?: 'reference' | 'content' | 'user') {
+  if (cacheType) {
+    queryCache[cacheType].clear(pattern);
+  } else {
+    // Clear from all caches if type not specified
+    Object.values(queryCache).forEach(cache => cache.clear(pattern));
+  }
+  
+  // Return a resolved promise to satisfy the async requirement
+  return Promise.resolve();
+}
+
+// Database operations with optimized caching for read operations
+export async function getTopics(page = 1, limit = 10, categoryId?: string) {
   try {
     const supabase = await createClient();
     const start = (page - 1) * limit;
     
-    // Use caching for public data
-    return cachedQuery(`topics_p${page}_l${limit}`, async () => {
-      const { data, error, count } = await supabase
+    // For high traffic, limit the fields returned
+    const cacheKey = `topics_p${page}_l${limit}${categoryId ? `_c${categoryId}` : ''}`;
+    
+    return cachedQuery(cacheKey, async () => {
+      // Start with a base query builder
+      let query = supabase
         .from('topics')
         .select(`
-          *,
+          id, 
+          title, 
+          slug,
+          created_at,
+          updated_at,
+          view_count,
+          reply_count,
+          is_pinned,
           author: profiles (
             id,
-            email,
             full_name
           ),
           category: categories (
@@ -130,8 +242,16 @@ export async function getTopics(page = 1, limit = 10) {
           ),
           _count
         `, { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(start, start + limit - 1);
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false });
+      
+      // Apply category filter if provided
+      if (categoryId) {
+        query = query.eq('category_id', categoryId);
+      }
+      
+      // Apply pagination with range
+      const { data, error, count } = await query.range(start, start + limit - 1);
 
       if (error) {
         console.error('Error fetching topics:', error);
@@ -139,6 +259,9 @@ export async function getTopics(page = 1, limit = 10) {
       }
 
       return { data: data || [], count: count || 0 };
+    }, {
+      cacheType: 'content',
+      ttl: CACHE_TTL.dynamic, // Quick refresh for topic listings
     });
   } catch (error) {
     console.error('Error in getTopics:', error);
@@ -146,12 +269,11 @@ export async function getTopics(page = 1, limit = 10) {
   }
 }
 
-// Get a specific topic by ID
+// Get a specific topic by ID with optimized fields
 export async function getTopic(id: string) {
   try {
     const supabase = await createClient();
     
-    // Individual topics can be cached longer
     return cachedQuery(`topic_${id}`, async () => {
       const { data, error } = await supabase
         .from('topics')
@@ -160,11 +282,13 @@ export async function getTopic(id: string) {
           author: profiles (
             id,
             email,
-            full_name
+            full_name,
+            avatar_url
           ),
           category: categories (
             id,
-            name
+            name,
+            slug
           )
         `)
         .eq('id', id)
@@ -176,6 +300,9 @@ export async function getTopic(id: string) {
       }
 
       return data;
+    }, {
+      cacheType: 'content',
+      ttl: CACHE_TTL.public,
     });
   } catch (error) {
     console.error('Error in getTopic:', error);
@@ -265,14 +392,14 @@ export async function getComments(topicId: string) {
     const supabase = await createClient();
     
     return cachedQuery(`comments_${topicId}`, async () => {
+      // Using proper caching for performance and reduced database load
       const { data, error } = await supabase
         .from('comments')
         .select(`
           *,
-          author: profiles (
+          profiles:user_id (
             id,
-            email,
-            full_name,
+            name,
             avatar_url
           )
         `)
@@ -284,7 +411,27 @@ export async function getComments(topicId: string) {
         return [];
       }
       
-      return data || [];
+      // Transform data to match expected format for the UI
+      return (data || []).map(comment => ({
+        id: comment.id,
+        content: comment.content,
+        created_at: comment.created_at,
+        updated_at: comment.updated_at,
+        topic_id: comment.topic_id,
+        author: comment.profiles ? {
+          id: comment.profiles.id,
+          full_name: comment.profiles.name || 'Anonymous',
+          avatar_url: comment.profiles.avatar_url
+        } : {
+          id: comment.user_id || '',
+          full_name: comment.author_name || 'Anonymous',
+          avatar_url: null
+        },
+        is_solution: comment.is_solution || false
+      }));
+    }, {
+      cacheType: 'content',
+      ttl: 60 * 1000 // Cache for 1 minute
     });
   } catch (error) {
     console.error('Error in getComments:', error);

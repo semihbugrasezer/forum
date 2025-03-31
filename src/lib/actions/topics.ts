@@ -351,23 +351,50 @@ export async function deleteTopic(topicId: string) {
  * Increments the view count for a topic
  */
 export async function incrementViewCount(topicId: string) {
+  if (!topicId) {
+    console.error('incrementViewCount: No topic ID provided');
+    return false;
+  }
+
   try {
+    console.log(`Incrementing view count for topic ${topicId}`);
     const supabase = await createClient();
     if (!supabase) {
       console.error('Failed to create Supabase client');
       return false;
     }
 
-    const { error } = await supabase.rpc('increment_view_count', {
-      topic_id: topicId,
-    });
+    // First try to use the RPC function if it exists
+    try {
+      const { error } = await supabase.rpc('increment_view_count', {
+        topic_id: topicId,
+      });
 
-    if (error) {
-      console.error('Error incrementing view count:', error);
+      if (!error) {
+        console.log(`Successfully incremented view count for topic ${topicId} using RPC`);
+        revalidatePath(`/topics/${topicId}`);
+        return true;
+      }
+
+      // If RPC fails, it might be that the function doesn't exist, try direct update
+      console.warn('RPC increment_view_count failed, trying direct update', error);
+    } catch (rpcError) {
+      console.warn('RPC increment_view_count error, trying direct update', rpcError);
+    }
+
+    // Fallback to direct update
+    const { error: updateError } = await supabase
+      .from('topics')
+      .update({ views: supabase.rpc('increment', { value: 1, max: 1000000 }) })
+      .eq('id', topicId);
+
+    if (updateError) {
+      console.error('Error incrementing view count via direct update:', updateError);
       return false;
     }
 
-    revalidatePath('/topics/[slug]');
+    console.log(`Successfully incremented view count for topic ${topicId} via direct update`);
+    revalidatePath(`/topics/${topicId}`);
     return true;
   } catch (error) {
     console.error('Error in incrementViewCount:', error);
@@ -444,48 +471,134 @@ function assertTopicResult(result: unknown): asserts result is Database['Tables'
 }
 
 export async function getTopicBySlug(slugOrId: string): Promise<Topic | null> {
+  if (!slugOrId || typeof slugOrId !== 'string') {
+    console.error("Invalid slug or ID provided:", slugOrId);
+    return null;
+  }
+
   try {
     const supabase = await createClient();
     if (!supabase) throw new Error("Failed to create Supabase client");
 
-    type TopicResponse = Database['Tables']['topics']['Row'] & {
-      profiles: { username: string; avatar_url: string; }[];
-      categories: { name: string; slug: string; }[];
-    };
-
-    const query = supabase
+    // Looking at the database.types.ts schema
+    console.log(`Attempting to fetch topic with slug/id: ${slugOrId}`);
+    
+    // First try to fetch by slug
+    const { data, error } = await supabase
       .from('topics')
       .select(`
-        *,
-        profiles (username, avatar_url),
-        categories (name, slug)
+        id,
+        title,
+        content,
+        slug,
+        user_id,
+        category,
+        tags,
+        created_at,
+        updated_at,
+        likes_count,
+        comments_count,
+        views,
+        is_pinned,
+        is_locked,
+        profiles:user_id (
+          id,
+          name,
+          avatar_url
+        )
       `)
       .eq('slug', slugOrId)
-      .single() as unknown as Promise<QueryResult<TopicResponse>>;
-
-    const { data, error } = await query;
+      .single();
 
     if (error || !data) {
-      if (!/^\d+$/.test(slugOrId)) return null;
+      console.log(`No topic found with slug "${slugOrId}", trying as ID...`);
       
+      // If no results by slug, try by ID
       const { data: idData, error: idError } = await supabase
         .from('topics')
         .select(`
-          *,
-          profiles (username, avatar_url),
-          categories (name, slug)
+          id,
+          title,
+          content,
+          slug,
+          user_id,
+          category,
+          tags,
+          created_at,
+          updated_at,
+          likes_count,
+          comments_count,
+          views,
+          is_pinned,
+          is_locked,
+          profiles:user_id (
+            id,
+            name,
+            avatar_url
+          )
         `)
         .eq('id', slugOrId)
-        .single() as QueryResult<Database['Tables']['topics']['Row'] & {
-          profiles: { username: string; avatar_url: string }[];
-          categories: { name: string; slug: string }[];
-        }>;
+        .single();
 
-      if (idError || !idData) return null;
-      return mapDbTopicToTopic(idData);
+      if (idError || !idData) {
+        console.log(`No topic found with ID "${slugOrId}" either.`);
+        return null;
+      }
+      
+      console.log(`Topic found by ID: ${idData.id}`);
+      
+      // Map the database topic to our application's Topic interface
+      return {
+        id: idData.id,
+        title: idData.title,
+        content: idData.content, 
+        slug: idData.slug || idData.id,
+        author_id: idData.user_id || '',
+        author: idData.profiles ? {
+          id: idData.profiles.id || '',
+          full_name: idData.profiles.name || '',
+          email: ''
+        } : undefined,
+        category_id: idData.category || undefined,
+        category: idData.category ? {
+          id: idData.category,
+          name: idData.category // We'll use the slug as name if category object isn't available
+        } : undefined,
+        tags: idData.tags || [],
+        created_at: idData.created_at,
+        updated_at: idData.updated_at || undefined,
+        comment_count: idData.comments_count || 0,
+        view_count: idData.views || 0,
+        like_count: idData.likes_count || 0
+      };
     }
 
-    return mapDbTopicToTopic(data);
+    console.log(`Topic found by slug: ${data.id}`);
+
+    // Map the database topic to our application's Topic interface
+    return {
+      id: data.id,
+      title: data.title,
+      content: data.content, 
+      slug: data.slug || data.id,
+      author_id: data.user_id || '',
+      author: data.profiles ? {
+        id: data.profiles.id || '',
+        full_name: data.profiles.name || '',
+        email: ''
+      } : undefined,
+      category_id: data.category || undefined,
+      category: data.category ? {
+        id: data.category,
+        name: data.category // We'll use the slug as name if category object isn't available
+      } : undefined,
+      tags: data.tags || [],
+      created_at: data.created_at,
+      updated_at: data.updated_at || undefined,
+      comment_count: data.comments_count || 0,
+      view_count: data.views || 0,
+      like_count: data.likes_count || 0
+    };
   } catch (error) {
     console.error("Error in getTopicBySlug:", error);
     return null;

@@ -5,9 +5,16 @@ import { createSupabaseCookie, parseSupabaseCookie } from '@/lib/utils/cookies'
 
 // Rate limiting configuration - use environment variables with fallbacks
 const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW || '60000', 10); // 1 minute default
-const MAX_REQUESTS = parseInt(process.env.MAX_REQUESTS_PER_WINDOW || '100', 10); // 100 requests default
-// Using a more efficient memory store implementation for high traffic
+const MAX_REQUESTS = parseInt(process.env.MAX_REQUESTS_PER_WINDOW || '200', 10); // Increased to 200 requests for higher traffic
+// Using a more memory-efficient implementation for high traffic
 const rateLimitStore: Map<string, { count: number; timestamp: number }> = new Map();
+
+// Cache TTL settings for different content types - use environment variables with fallbacks
+const CACHE_TTL = {
+  static: parseInt(process.env.CACHE_TTL_STATIC || '86400', 10), // 24 hours for static content
+  public: parseInt(process.env.CACHE_TTL_PUBLIC || '3600', 10), // 1 hour for public content
+  dynamic: parseInt(process.env.CACHE_TTL_DYNAMIC || '300', 10), // 5 minutes for dynamic content
+};
 
 // Protected routes configuration
 const protectedRoutes = [
@@ -113,13 +120,21 @@ function errorResponse(status: number, message: string) {
   );
 }
 
-// Cache helper for response caching
-function addCacheHeaders(res: NextResponse, cacheable: boolean = false) {
-  if (cacheable) {
-    res.headers.set('Cache-Control', `public, max-age=${process.env.CACHE_DURATION || '3600'}, s-maxage=${process.env.CACHE_DURATION || '3600'}`);
-  } else {
+// Cache helper for response caching with improved headers
+function addCacheHeaders(res: NextResponse, routeType: 'static' | 'public' | 'dynamic' | 'none' = 'none') {
+  if (routeType === 'none') {
     res.headers.set('Cache-Control', 'no-store, max-age=0');
+    return res;
   }
+  
+  const ttl = CACHE_TTL[routeType];
+  
+  // Add cache headers appropriate for the content type
+  res.headers.set('Cache-Control', `public, max-age=${ttl}, s-maxage=${ttl}, stale-while-revalidate=${Math.floor(ttl/2)}`);
+  
+  // Add Vary header to properly cache based on device and content negotiation
+  res.headers.set('Vary', 'Accept, Accept-Encoding, Accept-Language, User-Agent');
+  
   return res;
 }
 
@@ -195,9 +210,12 @@ export async function middleware(request: NextRequest) {
       
       // Development environment check
       if (process.env.NODE_ENV === 'development' && 
-          process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true' &&
-          process.env.DEVELOPMENT_ADMIN_EMAIL === session.user.user_metadata.email) {
-        return true
+          process.env.NEXT_PUBLIC_ADMIN_ACCESS === 'true') {
+        // If DEVELOPMENT_ADMIN_EMAIL is not set, allow any email in development mode
+        if (!process.env.DEVELOPMENT_ADMIN_EMAIL || 
+            process.env.DEVELOPMENT_ADMIN_EMAIL === session.user.user_metadata.email) {
+          return true
+        }
       }
       
       return session.user.user_metadata.email?.endsWith('@thy.com') || 
@@ -227,15 +245,30 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/', request.url))
     }
 
-    // Add caching headers for public, cacheable routes
-    const isCacheable = 
-      (request.nextUrl.pathname === '/' || 
-       request.nextUrl.pathname.startsWith('/forum') || 
-       request.nextUrl.pathname.startsWith('/search')) && 
-      request.method === 'GET' && 
-      !session; // Only cache for anonymous users
-
-    return addCacheHeaders(response, isCacheable);
+    // Identify route type for optimized caching
+    let routeType: 'static' | 'public' | 'dynamic' | 'none' = 'none';
+    
+    // Static assets get longest cache time
+    if (publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+      routeType = 'static';
+    } 
+    // Public routes that can be cached for all users
+    else if ((request.nextUrl.pathname === '/' || 
+        request.nextUrl.pathname.startsWith('/forum') || 
+        request.nextUrl.pathname.startsWith('/search')) && 
+        request.method === 'GET' && 
+        !session) {
+      routeType = 'public';
+    }
+    // Dynamic but still cacheable content
+    else if (request.method === 'GET' && 
+        !adminRoutes.some(route => request.nextUrl.pathname.startsWith(route)) &&
+        !request.nextUrl.pathname.includes('/edit') &&
+        !request.nextUrl.pathname.includes('/new')) {
+      routeType = 'dynamic';
+    }
+    
+    return addCacheHeaders(response, routeType);
   } catch (error) {
     console.error('Error in middleware:', error)
     return errorResponse(500, 'Internal Server Error')

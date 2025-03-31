@@ -113,6 +113,42 @@ export function Header() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
 
+  // Add CSS for mobile notch area
+  useEffect(() => {
+    // Add a style to change the notch color to blue on mobile
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @supports (padding-top: env(safe-area-inset-top)) {
+        :root {
+          --sat: env(safe-area-inset-top);
+          --sar: env(safe-area-inset-right);
+          --sab: env(safe-area-inset-bottom);
+          --sal: env(safe-area-inset-left);
+        }
+        body {
+          padding-top: var(--sat);
+          padding-right: var(--sar);
+          padding-bottom: var(--sab);
+          padding-left: var(--sal);
+        }
+        /* Change notch background color from red to blue */
+        @media only screen and (display-mode: standalone) {
+          html {
+            background-color: #2563eb; /* blue-600 */
+          }
+          body {
+            background-color: var(--background);
+          }
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -188,13 +224,13 @@ export function Header() {
   );
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-sm">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-sm dark:bg-background/90 dark:border-border/40">
       <div className="container flex h-16 items-center justify-between px-4">
         {/* Logo ve Başlık */}
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center space-x-2">
             {/* Airplane Logo - New transparent version */}
-            <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md text-primary font-bold">
+            <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md text-primary font-bold dark:text-blue-400">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="24"
@@ -210,7 +246,7 @@ export function Header() {
                 <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
               </svg>
             </div>
-            <span className="hidden font-bold text-base sm:inline-block">THY Forum</span>
+            <span className="hidden font-bold text-base sm:inline-block dark:text-white">THY Forum</span>
           </Link>
         </div>
 
@@ -249,10 +285,10 @@ export function Header() {
                 key={item.href} 
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary",
+                  "flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary dark:hover:text-blue-400",
                   pathname === item.href || pathname?.startsWith(item.href)
-                    ? "text-foreground"
-                    : "text-muted-foreground"
+                    ? "text-foreground dark:text-white"
+                    : "text-muted-foreground dark:text-gray-400"
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -308,7 +344,7 @@ export function Header() {
                 <Button variant="ghost" size="icon">
                   <Bell className="h-5 w-5" />
                   {notificationCount > 0 && (
-                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-600 text-[10px] font-medium text-white flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-blue-600 text-[10px] font-medium text-white flex items-center justify-center">
                       {notificationCount}
                     </span>
                   )}
@@ -327,31 +363,36 @@ export function Header() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                    <Avatar className="h-8 w-8">
+                    <Avatar className="h-8 w-8 ring-2 ring-offset-2 ring-offset-background ring-primary/10 dark:ring-blue-500/20">
                       <AvatarImage src={user.user_metadata?.avatar_url || ""} alt="Profil" />
-                      <AvatarFallback>{user.email?.[0].toUpperCase() || "U"}</AvatarFallback>
+                      <AvatarFallback className="bg-primary/10 dark:bg-blue-500/20 text-primary dark:text-blue-400">{user.email?.[0].toUpperCase() || "U"}</AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuContent className="w-56 dark:bg-background/95 dark:backdrop-blur-sm dark:border-border/50" align="end" forceMount>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{user.user_metadata?.full_name || user.email?.split("@")[0]}</p>
-                      <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                      <p className="text-sm font-medium leading-none dark:text-white">{user.user_metadata?.full_name || user.email?.split("@")[0]}</p>
+                      <p className="text-xs leading-none text-muted-foreground dark:text-gray-400">{user.email}</p>
                     </div>
                   </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
+                  <DropdownMenuSeparator className="dark:bg-border/50" />
                   {filteredUserNavItems.map((item) => (
-                    <DropdownMenuItem key={item.href} asChild>
-                      <Link href={item.href} className="cursor-pointer">
+                    <DropdownMenuItem key={item.href} asChild className="dark:focus:bg-accent/70">
+                      <Link href={item.href} className="cursor-pointer dark:text-gray-200">
                         <item.icon className="mr-2 h-4 w-4" />
                         <span>{item.title}</span>
+                        {item.title === "Bildirimler" && notificationCount > 0 && (
+                          <Badge variant="primary" className="ml-auto bg-blue-600 hover:bg-blue-700 scale-75">
+                            {notificationCount}
+                          </Badge>
+                        )}
                       </Link>
                     </DropdownMenuItem>
                   ))}
-                  <DropdownMenuSeparator />
+                  <DropdownMenuSeparator className="dark:bg-border/50" />
                   <DropdownMenuItem 
-                    className="cursor-pointer text-red-600 focus:text-red-600"
+                    className="cursor-pointer text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400 dark:focus:bg-accent/70"
                     onClick={handleSignOut}
                   >
                     <LogOut className="mr-2 h-4 w-4" />
@@ -384,27 +425,27 @@ export function Header() {
                 <span className="sr-only">Menü</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-72 sm:w-80">
+            <SheetContent side="right" className="w-72 sm:w-80 dark:bg-background/95 dark:backdrop-blur-md dark:border-border/50">
               <SheetHeader className="mb-4">
-                <SheetTitle>THY Forum</SheetTitle>
+                <SheetTitle className="dark:text-white">THY Forum</SheetTitle>
               </SheetHeader>
               
               {/* Mobil Kullanıcı Alanı */}
               {user ? (
                 <div className="mb-6 flex items-center space-x-4">
-                  <Avatar className="h-10 w-10">
+                  <Avatar className="h-10 w-10 ring-2 ring-offset-2 ring-offset-background ring-primary/10 dark:ring-blue-500/20">
                     <AvatarImage src={user.user_metadata?.avatar_url || ""} alt="Profil" />
-                    <AvatarFallback>{user.email?.[0].toUpperCase() || "U"}</AvatarFallback>
+                    <AvatarFallback className="bg-primary/10 dark:bg-blue-500/20 text-primary dark:text-blue-400">{user.email?.[0].toUpperCase() || "U"}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-sm font-medium leading-none">{user.user_metadata?.full_name || user.email?.split("@")[0]}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="text-sm font-medium leading-none dark:text-white">{user.user_metadata?.full_name || user.email?.split("@")[0]}</p>
+                    <p className="text-xs text-muted-foreground dark:text-gray-400">{user.email}</p>
                   </div>
                 </div>
               ) : (
                 <div className="mb-6 flex flex-col gap-2">
                   <SheetClose asChild>
-                    <Button asChild>
+                    <Button asChild className="dark:bg-blue-600/90 dark:hover:bg-blue-700">
                       <Link href="/auth/login" onClick={handleSignIn}>
                         <LogIn className="mr-2 h-4 w-4" />
                         Giriş Yap
@@ -412,7 +453,7 @@ export function Header() {
                     </Button>
                   </SheetClose>
                   <SheetClose asChild>
-                    <Button variant="outline" asChild>
+                    <Button variant="outline" asChild className="dark:bg-transparent dark:text-gray-200 dark:border-gray-700">
                       <Link href="/auth/register" onClick={handleSignIn}>
                         Kayıt Ol
                       </Link>
@@ -423,7 +464,7 @@ export function Header() {
 
               {/* Mobil Ana Menü */}
               <div className="space-y-1 py-2">
-                <h2 className="px-2 text-lg font-semibold tracking-tight">Ana Menü</h2>
+                <h2 className="px-2 text-lg font-semibold tracking-tight dark:text-white">Ana Menü</h2>
                 {mainNavItems.map((item) => 
                   (!item.requireAuth || (item.requireAuth && user)) && (
                     <SheetClose key={item.href} asChild>
@@ -432,8 +473,8 @@ export function Header() {
                         className={cn(
                           "group flex items-center rounded-md px-2 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
                           pathname === item.href || pathname?.startsWith(item.href)
-                            ? "bg-accent"
-                            : "transparent"
+                            ? "bg-accent dark:bg-accent/80 dark:text-white"
+                            : "transparent dark:text-gray-200"
                         )}
                       >
                         <item.icon className="mr-2 h-5 w-5" />
@@ -446,7 +487,7 @@ export function Header() {
                 {/* Mobil için belirgin Yeni Konu Buton */}
                 {user && (
                   <SheetClose asChild>
-                    <Button asChild className="w-full mt-2 justify-start">
+                    <Button asChild className="w-full mt-2 justify-start dark:bg-blue-600/90 dark:hover:bg-blue-700">
                       <Link href="/new-topic">
                         <PlusCircle className="mr-2 h-5 w-5" />
                         Yeni Konu Oluştur
@@ -459,7 +500,7 @@ export function Header() {
               {/* Mobil Kullanıcı Menüsü */}
               {user && (
                 <div className="space-y-1 py-2">
-                  <h2 className="px-2 text-lg font-semibold tracking-tight">Kullanıcı Menüsü</h2>
+                  <h2 className="px-2 text-lg font-semibold tracking-tight dark:text-white">Kullanıcı Menüsü</h2>
                   {filteredUserNavItems.map((item) => (
                     <SheetClose key={item.href} asChild>
                       <Link
@@ -467,14 +508,14 @@ export function Header() {
                         className={cn(
                           "group flex items-center rounded-md px-2 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
                           pathname === item.href || pathname?.startsWith(item.href)
-                            ? "bg-accent"
-                            : "transparent"
+                            ? "bg-accent dark:bg-accent/80 dark:text-white"
+                            : "transparent dark:text-gray-200"
                         )}
                       >
                         <item.icon className="mr-2 h-5 w-5" />
                         <span>{item.title}</span>
                         {item.title === "Bildirimler" && notificationCount > 0 && (
-                          <Badge variant="destructive" className="ml-auto">
+                          <Badge variant="primary" className="ml-auto bg-blue-600 hover:bg-blue-700">
                             {notificationCount}
                           </Badge>
                         )}
@@ -486,31 +527,49 @@ export function Header() {
 
               {/* Tema Ayarları */}
               <div className="space-y-1 py-2">
-                <h2 className="px-2 text-lg font-semibold tracking-tight">Ayarlar</h2>
-                <div className="grid grid-cols-3 gap-2 px-2 py-2">
-                  <Button 
-                    variant={mounted && theme === "light" ? "default" : "outline"}
-                    className="w-full flex items-center justify-center" 
-                    onClick={() => setTheme("light")}
-                  >
-                    <Sun className="h-4 w-4 mr-1" />
-                    Açık
-                  </Button>
-                  <Button 
-                    variant={mounted && theme === "dark" ? "default" : "outline"}
-                    className="w-full flex items-center justify-center" 
-                    onClick={() => setTheme("dark")}
-                  >
-                    <Moon className="h-4 w-4 mr-1" />
-                    Koyu
-                  </Button>
-                  <Button 
-                    variant={mounted && theme === "system" ? "default" : "outline"}
-                    className="w-full flex items-center justify-center" 
-                    onClick={() => setTheme("system")}
-                  >
-                    Sistem
-                  </Button>
+                <h2 className="px-2 text-lg font-semibold tracking-tight dark:text-white">Tema</h2>
+                <div className="px-2 py-3">
+                  <div className="relative h-12 w-full overflow-hidden rounded-lg border dark:border-gray-700 bg-background p-1 dark:bg-background/30">
+                    <div 
+                      className={cn(
+                        "absolute top-0 bottom-0 w-1/3 rounded-md transition-all duration-200",
+                        theme === "light" ? "left-0 bg-blue-600" : 
+                        theme === "dark" ? "left-1/3 bg-blue-600" : 
+                        "left-2/3 bg-blue-600"
+                      )}
+                    />
+                    <div className="relative z-10 grid grid-cols-3 gap-1 text-xs font-medium">
+                      <button
+                        className={cn(
+                          "flex h-10 items-center justify-center rounded-md",
+                          theme === "light" ? "text-white" : "text-foreground hover:text-primary dark:text-gray-300 dark:hover:text-white"
+                        )}
+                        onClick={() => setTheme("light")}
+                      >
+                        <Sun className="mr-1 h-4 w-4" />
+                        Açık
+                      </button>
+                      <button
+                        className={cn(
+                          "flex h-10 items-center justify-center rounded-md",
+                          theme === "dark" ? "text-white" : "text-foreground hover:text-primary dark:text-gray-300 dark:hover:text-white"
+                        )}
+                        onClick={() => setTheme("dark")}
+                      >
+                        <Moon className="mr-1 h-4 w-4" />
+                        Koyu
+                      </button>
+                      <button
+                        className={cn(
+                          "flex h-10 items-center justify-center rounded-md",
+                          theme === "system" ? "text-white" : "text-foreground hover:text-primary dark:text-gray-300 dark:hover:text-white"
+                        )}
+                        onClick={() => setTheme("system")}
+                      >
+                        Sistem
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -519,7 +578,7 @@ export function Header() {
                 <div className="py-4">
                   <Button 
                     variant="destructive" 
-                    className="w-full" 
+                    className="w-full dark:bg-red-900/80 dark:text-white dark:hover:bg-red-900" 
                     onClick={handleSignOut}
                   >
                     <LogOut className="mr-2 h-4 w-4" />
